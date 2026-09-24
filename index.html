@@ -1,0 +1,243 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyBIPA · Modul Ajar Digital Tingkat A1 Bermuatan Lokal Minangkabau</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;600&family=Kaushan+Script&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="awas-berkas" id="awas-berkas" hidden style="position:fixed;left:12px;right:12px;bottom:12px;z-index:300;background:#7A2617;color:#FFF4E6;border:1px solid #D9A441;border-radius:14px;padding:16px 18px;font-family:system-ui,sans-serif;font-size:13.5px;line-height:1.6">
+  <b>Berkas tampaknya belum termuat utuh.</b>
+  <span>Bagian program modul tidak selesai dibaca peramban, sehingga login, tayangan mars, dan
+  audio tidak berfungsi. Biasanya ini terjadi karena unduhan terputus atau berkas dibuka langsung
+  dari pratinjau surel atau penyimpanan awan.</span>
+  <span><b>Cara memperbaiki:</b> unduh ulang berkas sampai selesai, pastikan ukurannya utuh,
+  lalu buka dengan Chrome, Edge, atau Firefox.</span>
+  <button type="button" id="awas-tutup">Tutup pesan ini</button>
+</div>
+
+
+<!-- ======================= SAMPUL BERANIMASI ======================= -->
+<section class="sampul" id="sampul">
+  <svg class="ombak atas" viewBox="0 0 1200 420" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,0 H560 C400,86 190,196 0,360 Z" fill="#E8413B"/>
+    <path d="M0,0 H430 C300,74 140,168 0,300 Z" fill="#FFD24E"/>
+    <path d="M0,0 H300 C210,56 100,128 0,236 Z" fill="#FFFFFF" opacity=".92"/>
+  </svg>
+  <svg class="ombak bawah" viewBox="0 0 1200 420" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,420 V236 C260,300 520,176 800,140 C960,120 1090,132 1200,150 V420 Z" fill="#E8413B" opacity=".92"/>
+    <path d="M0,420 V292 C250,344 520,236 810,204 C970,186 1096,196 1200,212 V420 Z" fill="#2E2E2E"/>
+    <path d="M0,420 V344 C260,392 540,296 830,264 C990,246 1104,254 1200,268 V420 Z" fill="url(#emasOmbak)"/>
+    <defs><linearGradient id="emasOmbak" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#C8952F"/><stop offset=".5" stop-color="#F2D98C"/>
+      <stop offset="1" stop-color="#D9A93C"/></linearGradient></defs>
+  </svg>
+  <i class="titik-hias ki" aria-hidden="true"></i>
+  <i class="titik-hias ka" aria-hidden="true"></i>
+
+  <div class="hero" id="panggung">
+    <div class="hero-lembaga">
+      <img id="logo-unp" alt="" aria-hidden="true">
+      <span id="hero-mitra">UNIVERSITAS NEGERI PADANG</span>
+    </div>
+
+    <div class="hero-judul">
+      <h1>MODUL AJAR DIGITAL</h1>
+      <p class="merek" id="sampul-lembaga">MyBIPA</p>
+      <p class="tingkat" id="sampul-tingkat">Tingkatan A1</p>
+    </div>
+
+    <div class="hero-rumah" id="bingkai">
+      <img id="rumah-gadang" alt="Ilustrasi rumah gadang Minangkabau">
+    </div>
+
+    <div class="hero-kaki">
+      <p class="salam" id="sampul-halo">Salamaik datang di modul kami</p>
+      <div class="tuas-baris">
+        <button class="mulai" id="btn-mulai" type="button">Mulai belajar <span aria-hidden="true">&#8594;</span></button>
+        <button class="mulai kedua" id="btn-mars" type="button"><span aria-hidden="true">&#9834;</span> Mars Sumatera Barat</button>
+        <button class="mulai kedua" id="btn-akun" type="button"><span aria-hidden="true">&#128100;</span> Masuk atau daftar</button>
+      </div>
+      <p class="penyusun">Disusun oleh <b id="sampul-penyusun">Radi Sukma, S.Pd.</b>
+        <span id="sampul-tahun">2026</span></p>
+    </div>
+  </div>
+
+  <img id="gambar-sampul" class="sampul-cetak" alt="Sampul Modul Ajar Digital MyBIPA Tingkat A1 Bermuatan Lokal Minangkabau">
+  <img id="latar-sampul" class="sampul-simpan" alt="" aria-hidden="true">
+  <div class="tirai" aria-hidden="true"></div>
+</section>
+
+<div class="layar-tutup" id="layar-tutup" aria-hidden="true"></div>
+
+<div class="identitas-cetak" id="identitas-cetak" aria-hidden="true"></div>
+<div class="kaki-cetak" id="kaki-cetak" aria-hidden="true"></div>
+
+<!-- ======================= GERBANG AKUN ======================= -->
+<div class="gerbang" id="gerbang" aria-hidden="true">
+  <div class="gerbang-kotak">
+    <button class="gerbang-tutup" id="gerbang-tutup" type="button" aria-label="Tutup">&#10005;</button>
+    <div class="gerbang-kop">
+      <img id="gerbang-logo" alt="" aria-hidden="true">
+      <div><b>MyBIPA</b><small>Modul Ajar Digital Tingkat A1</small></div>
+    </div>
+
+    <p class="gerbang-awas" id="gerbang-awas" hidden></p>
+
+    <div class="gerbang-tab" role="tablist">
+      <button type="button" class="pilih" data-tab="masuk">Masuk</button>
+      <button type="button" data-tab="daftar">Daftar baru</button>
+      <button type="button" data-tab="pengajar">Pengajar</button>
+      <button type="button" data-tab="admin">Admin</button>
+    </div>
+
+    <form class="gerbang-borang" id="form-masuk" data-panel="masuk" autocomplete="off" novalidate>
+      <p class="gerbang-arahan">Masukkan nama dan kata sandi yang Anda buat saat mendaftar.</p>
+      <label>Nama lengkap <input type="text" id="m-nama" autocomplete="username"></label>
+      <label>Kata sandi <input type="password" id="m-sandi" autocomplete="current-password"></label>
+      <p class="gerbang-pesan" id="pesan-masuk"></p>
+      <button class="gerbang-tuas" type="submit">Masuk ke modul</button>
+    </form>
+
+    <form class="gerbang-borang" id="form-daftar" data-panel="daftar" hidden autocomplete="off" novalidate>
+      <p class="gerbang-arahan">Isi data berikut satu kali saja. Nama Anda akan tercetak pada berkas PDF dan sertifikat.</p>
+      <label>Nama lengkap <input type="text" id="d-nama"></label>
+      <label>Nomor HP atau WhatsApp <input type="tel" id="d-wa"></label>
+      <label>Surel <input type="email" id="d-surel"></label>
+      <label>Asal kampus atau instansi <input type="text" id="d-instansi"></label>
+      <label>Saya mendaftar sebagai
+        <select id="d-peran">
+          <option value="pemelajar">Pemelajar BIPA</option>
+          <option value="pengajar">Pengajar atau dosen</option>
+        </select>
+      </label>
+      <label id="baris-dosen">Nama pengajar atau dosen pembimbing <span class="opsional">opsional</span>
+        <input type="text" id="d-dosen">
+        <small class="petunjuk-kolom">Isi bila Anda dibimbing seorang pengajar, agar kemajuan belajar
+          Anda muncul pada daftar kelas beliau. Boleh dikosongkan.</small>
+      </label>
+      <label>Kata sandi <input type="password" id="d-sandi" ></label>
+      <label>Ulangi kata sandi <input type="password" id="d-sandi2" ></label>
+      <p class="gerbang-pesan" id="pesan-daftar"></p>
+      <button class="gerbang-tuas" type="submit">Daftar dan mulai belajar</button>
+    </form>
+
+    <form class="gerbang-borang" id="form-pengajar" data-panel="pengajar" hidden autocomplete="off" novalidate>
+      <p class="gerbang-arahan">Khusus pengajar atau dosen. Bila surel Anda belum terdaftar, akun
+        pengajar dibuat sekaligus pada saat ini juga.</p>
+      <label>Nama lengkap <input type="text" id="g-nama" autocomplete="off"></label>
+      <label>Surel <input type="email" id="g-surel" autocomplete="off"></label>
+      <label>Asal kampus atau instansi <input type="text" id="g-instansi" autocomplete="off"></label>
+      <label>Kata sandi <input type="password" id="g-sandi" autocomplete="off">
+        <small class="petunjuk-kolom">Buat kata sandi minimal enam karakter pada pendaftaran pertama,
+          lalu pakai kata sandi yang sama untuk masuk berikutnya.</small>
+      </label>
+      <p class="gerbang-pesan" id="pesan-pengajar"></p>
+      <button class="gerbang-tuas" type="submit">Masuk sebagai pengajar</button>
+    </form>
+
+    <form class="gerbang-borang" id="form-admin" data-panel="admin" hidden autocomplete="off" novalidate>
+      <p class="gerbang-arahan">Halaman ini hanya untuk pengelola modul.</p>
+      <label>Nama lengkap <input type="text" id="a-nama" autocomplete="off"></label>
+      <label>Surel <input type="email" id="a-surel" autocomplete="off"></label>
+      <label>Kata sandi pengelola <input type="password" id="a-sandi" autocomplete="off"></label>
+      <p class="gerbang-pesan" id="pesan-admin"></p>
+      <button class="gerbang-tuas" type="submit">Masuk sebagai admin</button>
+    </form>
+
+    <p class="gerbang-kaki">Data akun dan kemajuan belajar tersimpan di peramban perangkat ini.
+      Gunakan tombol <b>Unduh cadangan akun</b> di daftar isi untuk menyimpan salinannya.</p>
+  </div>
+</div>
+
+
+<!-- ======================= LAYAR MEMUAT ======================= -->
+<div class="muat" id="muat" aria-hidden="true">
+  <div class="muat-isi">
+    <img class="muat-logo" id="muat-logo" alt="" aria-hidden="true">
+    <b class="muat-merek">MyBIPA</b>
+    <span class="muat-pesan" id="muat-pesan">Menyiapkan modul…</span>
+    <div class="muat-rel"><i></i></div>
+  </div>
+</div>
+
+<!-- ======================= TAYANGAN PEMBUKA ======================= -->
+<div class="tirai-mars" id="tirai-mars" aria-hidden="true">
+  <div class="kotak-mars">
+    <div class="kepala-mars">
+      <b>Mars Sumatera Barat</b>
+      <button class="tutup-mars" id="tutup-mars" type="button">✕ Tutup</button>
+    </div>
+    <video id="video-mars" controls playsinline preload="none"></video>
+    <p class="ket-mars">Lagu pembuka modul MyBIPA Tingkat A1. Hak cipta pada Pemerintah Provinsi Sumatera Barat.</p>
+  </div>
+</div>
+
+<!-- ======================= KERANGKA MODUL ======================= -->
+<div class="wadah">
+  <aside class="rak" id="rak">
+    <div class="merek">
+      <img id="logo-rak" alt="">
+      <b id="merek-nama">MyBIPA<small id="merek-ket">Modul Ajar Digital A1</small></b>
+    </div>
+    <div class="laju"><i id="laju-bar"></i></div>
+    <div class="laju-teks" id="laju-teks">0% · belum ada kegiatan dikerjakan</div>
+
+    <div class="rak-akun" id="rak-akun" hidden>
+      <button class="lingkar" id="akun-lingkar" type="button" title="Ganti foto profil">
+        <span id="akun-inisial">?</span>
+        <img id="akun-foto" alt="" hidden>
+      </button>
+      <span class="rak-akun-teks">
+        <b id="akun-nama">Tamu</b>
+        <small id="akun-instansi"></small>
+        <span class="peran" id="akun-peran"></span>
+      </span>
+      <button class="akun-keluar" id="btn-keluar" type="button" title="Keluar dari akun">Keluar</button>
+    </div>
+    <div class="rak-akun-tuas" id="rak-akun-tuas" hidden>
+      <button type="button" id="btn-foto">Tambahkan foto profil</button>
+      <button type="button" id="btn-hapus-foto" hidden>Hapus foto</button>
+    </div>
+    <input type="file" id="pilih-foto" accept="image/*" hidden>
+
+    <h6>Bagian awal</h6>
+    <nav id="daftar-awal"></nav>
+    <h6>Unit pembelajaran</h6>
+    <nav id="daftar-unit"></nav>
+    <h6>Bagian akhir</h6>
+    <nav id="daftar-akhir"></nav>
+    <button class="tuas" id="btn-sampul" type="button">← Kembali ke sampul</button>
+    <p class="tanda-versi" id="tanda-versi"></p>
+    <button class="tuas" id="btn-uji-sinkron" type="button">Periksa sambungan basis data</button>
+    <button class="tuas" id="btn-ambil-basis" type="button">Ambil kemajuan dari basis data</button>
+    <button class="tuas" id="btn-cadangan" type="button">Unduh cadangan akun (.json)</button>
+    <button class="tuas" id="btn-pulih" type="button">Pulihkan cadangan akun</button>
+    <button class="tuas" id="btn-unduh" type="button">Unduh jawaban saya (.txt)</button>
+    <button class="tuas" id="btn-simpan-modul" type="button">Unduh modul hasil suntingan (.html)</button>
+    <button class="tuas" id="btn-asal" type="button">Kembalikan teks asli</button>
+  </aside>
+
+  <main id="isi"></main>
+</div>
+
+<nav class="bilah" aria-label="Alat modul">
+  <button class="tuas-rak" id="btn-rak" type="button">☰ Daftar</button>
+  <button id="btn-cetak" type="button">Simpan PDF</button>
+  <button id="btn-animasi" type="button">Animasi mati</button>
+  <button id="btn-akun-bilah" type="button">👤 Akun</button>
+  <button id="btn-sunting" type="button">✎ Sunting</button>
+  <button id="btn-atas" type="button">↑</button>
+</nav>
+
+<div class="petunjuk-sunting" id="petunjuk-sunting">
+  <b>Mode sunting aktif.</b> Ketuk teks mana pun untuk mengubahnya. Perubahan tersimpan otomatis di peramban ini. Untuk membawa hasilnya ke perangkat lain, buka Daftar lalu tekan <b>Unduh modul hasil suntingan</b>.
+</div>
+
+  <script src="script.js"></script>
+</body>
+</html>
