@@ -3013,7 +3013,7 @@ const AKHIR = [
      ------------------------------------------------------------------
      Basis data  : MYBIPA_DATABASE
      Alamatnya   : https://docs.google.com/spreadsheets/d/
-                   1S60j4XaulPNmwnFBFDr7JXu4ADdvyHwEXFzAmRm2KxM/edit
+                   1wURIPGZ7jZwNJhAD8Jq_VmRMunvwIjl_TJWacII9bm8/edit
      Penghubung  : berkas MyBIPA-AppsScript.gs, diterbitkan sebagai
                    Web App pada script.google.com.
   
@@ -3027,7 +3027,7 @@ const AKHIR = [
      ================================================================== */
   var VERSI_MODUL = "2026.09.16 \u00b7 jalur JSONP";
   var URL_SINKRON = "https://script.google.com/macros/s/AKfycbzqjSvI1amxh-qJ5-1QcKehhUeLYyLerZ2VUz4TOW1Z5itoNICsGa-bnFmKbWwY3TfVaQ/exec";
-  var ID_BASISDATA = "1S60j4XaulPNmwnFBFDr7JXu4ADdvyHwEXFzAmRm2KxM";
+  var ID_BASISDATA = "1wURIPGZ7jZwNJhAD8Jq_VmRMunvwIjl_TJWacII9bm8";
 
   var GUDANG_OK = (function () {
     try {
