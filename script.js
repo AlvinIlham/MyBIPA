@@ -3413,6 +3413,7 @@ const AKHIR = [
         aksi: "simpan", nama: AKUN.nama, surel: AKUN.surel, wa: AKUN.wa,
         instansi: AKUN.instansi, peran: AKUN.peran,
         dosen: AKUN.dosen || "", catatan: "kemajuan", tingkat: "A1",
+        sandi: AKUN.sandi || "",
         unit: isi.unit, tuntas: isi.tuntas, rata: isi.rata, lengkap: isi.lengkap,
         penuh: { jawaban: JAWAB, nilai: SKOR, timpa: NILAI_TIMPA }
       });
@@ -5342,6 +5343,7 @@ const AKHIR = [
       aksi: "simpan", nama: nama, surel: surel, wa: wa, instansi: instansi,
       dosen: dosen, peran: peranPilih, tingkat: "A1", unit: [], tuntas: 0, rata: 0,
       lengkap: false, penuh: {},
+      sandi: sandiAcak(sandi),
       catatan: "pendaftaran baru"
     });
     pesan.className = "gerbang-pesan baik";
@@ -5357,15 +5359,94 @@ const AKHIR = [
   function prosesMasuk() {
     var pesan = document.getElementById("pesan-masuk");
     pesan.className = "gerbang-pesan";
-    var nama = document.getElementById("m-nama").value.trim().toLowerCase();
+    var namaInput = document.getElementById("m-nama").value.trim();
     var sandi = document.getElementById("m-sandi").value;
+    if (!namaInput || !sandi) { pesan.textContent = "Nama dan kata sandi wajib diisi."; return; }
+
+    var nama = namaInput.toLowerCase();
+    var sandiH = sandiAcak(sandi);
     var kunci = null;
     Object.keys(DAFTAR_AKUN).forEach(function (k) {
-      if (DAFTAR_AKUN[k].nama.toLowerCase() === nama) kunci = k;
+      if (DAFTAR_AKUN[k].nama.toLowerCase() === nama || k.toLowerCase() === nama) kunci = k;
     });
-    if (!kunci) { pesan.textContent = "Nama belum terdaftar. Silakan pilih Daftar baru."; return; }
-    if (DAFTAR_AKUN[kunci].sandi !== sandiAcak(sandi)) { pesan.textContent = "Kata sandi belum tepat."; return; }
-    masukkanSesi(kunci);
+
+    if (kunci && DAFTAR_AKUN[kunci].sandi === sandiH) {
+      masukkanSesi(kunci);
+      return;
+    }
+
+    if (!URL_SINKRON) {
+      if (!kunci) { pesan.textContent = "Nama belum terdaftar. Silakan pilih Daftar baru."; return; }
+      if (DAFTAR_AKUN[kunci].sandi !== sandiH) { pesan.textContent = "Kata sandi belum tepat."; return; }
+      return;
+    }
+
+    pesan.className = "gerbang-pesan";
+    pesan.textContent = "Memeriksa akun ke basis data...";
+    var tombol = document.querySelector("#form-masuk button[type='submit']");
+    if (tombol) tombol.disabled = true;
+
+    bacaBasisData({ aksi: "masuk", identitas: namaInput, sandi: sandiH }, function (j) {
+      if (tombol) tombol.disabled = false;
+      if (!j) {
+        if (!kunci) {
+          pesan.textContent = "Sambungan ke basis data terputus. Pastikan perangkat terhubung ke internet.";
+        } else {
+          pesan.textContent = "Kata sandi belum tepat.";
+        }
+        return;
+      }
+      if (!j.ok) {
+        pesan.textContent = j.pesan || "Nama atau kata sandi belum tepat.";
+        return;
+      }
+
+      var d = j.data || {};
+      var surel = (d.surel || "").toLowerCase().trim();
+      if (!surel) surel = (d.nama || "user").toLowerCase().replace(/[^a-z0-9]/g, "") + "@mybipa.user";
+
+      DAFTAR_AKUN[surel] = {
+        nama: d.nama || namaInput,
+        wa: d.wa || "-",
+        surel: surel,
+        instansi: d.instansi || "",
+        dosen: d.dosen || "",
+        sandi: sandiH,
+        peran: j.peran || d.peran || "pemelajar",
+        dibuat: d.dibuat || new Date().toISOString()
+      };
+      tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
+
+      var rekap = bacaGudang(KUNCI_REKAP, {});
+      rekap[surel] = {
+        nama: d.nama || namaInput,
+        instansi: d.instansi || "",
+        surel: surel,
+        wa: d.wa || "-",
+        unit: d.unit || [],
+        tuntas: d.tuntas || 0,
+        rata: d.rata || 0,
+        lengkap: (d.tuntas || 0) >= 11,
+        diperbarui: new Date().toISOString()
+      };
+      tulisGudang(KUNCI_REKAP, rekap);
+
+      var penuh = d.penuh || {};
+      var kunciSimpan = "mybipa-a1-minangkabau::" + surel;
+      if (penuh.jawaban && typeof penuh.jawaban === "object") {
+        tulisGudang(kunciSimpan, penuh.jawaban);
+      }
+      if (penuh.nilai && typeof penuh.nilai === "object") {
+        tulisGudang(kunciSimpan + "-nilai", penuh.nilai);
+      }
+      if (penuh.timpa && typeof penuh.timpa === "object") {
+        tulisGudang(kunciSimpan + "-timpa", penuh.timpa);
+      }
+
+      pesan.className = "gerbang-pesan baik";
+      pesan.textContent = "Berhasil masuk. Memuat ruang belajar...";
+      masukkanSesi(surel);
+    });
   }
   document.getElementById("form-masuk").addEventListener("submit", function (ev) {
     ev.preventDefault(); prosesMasuk();
@@ -5396,32 +5477,66 @@ const AKHIR = [
     if (surel === SUREL_ADMIN) { pesan.textContent = "Surel ini khusus pengelola. Gunakan tab Admin."; return; }
 
     var akun = DAFTAR_AKUN[surel];
+    var sandiH = sandiAcak(sandi);
     if (akun) {
       if (akun.peran === "pemelajar") {
         pesan.textContent = "Surel ini terdaftar sebagai pemelajar. Gunakan tab Masuk."; return;
       }
-      if (akun.sandi !== sandiAcak(sandi)) { pesan.textContent = "Kata sandi belum tepat."; return; }
+      if (akun.sandi !== sandiH) { pesan.textContent = "Kata sandi belum tepat."; return; }
       akun.nama = nama || akun.nama;
       if (instansi) akun.instansi = instansi;
       akun.peran = "pengajar";
+      tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
+      AKUN = DAFTAR_AKUN[surel]; catatKegiatan("masuk pengajar", instansi); AKUN = null;
+      pesan.className = "gerbang-pesan baik";
+      pesan.textContent = "Selamat datang, " + nama + ".";
+      masukkanSesi(surel);
     } else {
+      if (URL_SINKRON) {
+        pesan.textContent = "Memeriksa akun pengajar ke basis data...";
+        var tombol = document.querySelector("#form-pengajar button[type='submit']");
+        if (tombol) tombol.disabled = true;
+
+        bacaBasisData({ aksi: "masuk", identitas: surel, sandi: sandiH }, function (j) {
+          if (tombol) tombol.disabled = false;
+          if (j && j.ok && j.data) {
+            var d = j.data;
+            DAFTAR_AKUN[surel] = {
+              nama: d.nama || nama, wa: d.wa || "-", surel: surel, instansi: d.instansi || instansi || "Pengajar BIPA",
+              dosen: "", sandi: sandiH, peran: "pengajar", dibuat: new Date().toISOString()
+            };
+            tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
+            pesan.className = "gerbang-pesan baik";
+            pesan.textContent = "Selamat datang, " + (d.nama || nama) + ".";
+            masukkanSesi(surel);
+            return;
+          }
+          lanjutDaftarPengajar();
+        });
+        return;
+      }
+      lanjutDaftarPengajar();
+    }
+
+    function lanjutDaftarPengajar() {
       if (sandi.length < 6) { pesan.textContent = "Kata sandi baru minimal enam karakter."; return; }
       if (!instansi) { pesan.textContent = "Asal kampus atau instansi wajib diisi pada pendaftaran pertama."; return; }
       DAFTAR_AKUN[surel] = {
         nama: nama, wa: "-", surel: surel, instansi: instansi, dosen: "",
-        sandi: sandiAcak(sandi), peran: "pengajar", dibuat: new Date().toISOString()
+        sandi: sandiH, peran: "pengajar", dibuat: new Date().toISOString()
       };
       kirimSinkron({
         aksi: "simpan", catatan: "pendaftaran pengajar", peran: "pengajar", tingkat: "A1",
         nama: nama, surel: surel, wa: "-", instansi: instansi, dosen: "",
+        sandi: sandiH,
         unit: [], tuntas: 0, rata: 0, lengkap: false, penuh: {}
       });
+      tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
+      AKUN = DAFTAR_AKUN[surel]; catatKegiatan("pendaftaran pengajar", instansi); AKUN = null;
+      pesan.className = "gerbang-pesan baik";
+      pesan.textContent = "Selamat datang, " + nama + ".";
+      masukkanSesi(surel);
     }
-    tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
-    AKUN = DAFTAR_AKUN[surel]; catatKegiatan("pendaftaran pengajar", instansi); AKUN = null;
-    pesan.className = "gerbang-pesan baik";
-    pesan.textContent = "Selamat datang, " + nama + ".";
-    masukkanSesi(surel);
   }
   document.getElementById("form-pengajar").addEventListener("submit", function (ev) {
     ev.preventDefault(); prosesPengajar();
@@ -5474,6 +5589,7 @@ const AKHIR = [
     kirimSinkron({
       aksi: "simpan", catatan: "masuk", nama: AKUN.nama, surel: AKUN.surel, wa: AKUN.wa,
       instansi: AKUN.instansi, dosen: AKUN.dosen || "", peran: AKUN.peran, tingkat: "A1",
+      sandi: AKUN.sandi || "",
       unit: rekapKini.unit || [], tuntas: rekapKini.tuntas || 0, rata: rekapKini.rata || 0,
       lengkap: !!rekapKini.lengkap, penuh: {}
     });
