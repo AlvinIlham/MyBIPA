@@ -51,6 +51,20 @@ function kodeTingkat(t) {
 
 var SUREL_MYBIPA = 'mybipa3@gmail.com';
 var SUREL_ADMIN  = 'sukmaradi333@gmail.com';
+var SUREL_ADMIN_PER_TINGKAT = {
+  'A1': 'sukmaradi333@gmail.com',   // Admin A1 & A2 (Pak Radi Sukma)
+  'A2': 'sukmaradi333@gmail.com',
+  'B1': 'rahmazilla447@gmail.com',  // Admin B1 & B2 (Bu Azilla Rahma)
+  'B2': 'rahmazilla447@gmail.com',
+  'C1': 'sukmaradi333@gmail.com',   // Admin C1 & C2 (dapat disesuaikan)
+  'C2': 'sukmaradi333@gmail.com'
+};
+
+function ambilSurelAdmin(tingkat) {
+  var t = String(tingkat || '').trim().toUpperCase();
+  return SUREL_ADMIN_PER_TINGKAT[t] || SUREL_ADMIN;
+}
+
 var KIRIM_SUREL  = true;      // ubah ke false bila pemberitahuan surel tidak diperlukan
 
 var LEMBAR_PEMELAJAR = 'Pemelajar';
@@ -619,7 +633,7 @@ function kirimSurelBaru(data, tingkat) {
     'Instansi  : ' + (data.instansi || '-') + '\n' +
     'Pengajar  : ' + (data.dosen || 'tidak diisi') + '\n' +
     'Waktu     : ' + new Date().toLocaleString('id-ID') + '\n';
-  MailApp.sendEmail(SUREL_MYBIPA + ',' + SUREL_ADMIN,
+  MailApp.sendEmail(SUREL_MYBIPA + ',' + ambilSurelAdmin(tkt),
     'MyBIPA ' + tkt + ' — pendaftar baru: ' + (data.nama || ''), pesan);
 }
 
@@ -633,7 +647,7 @@ function kirimSurelSelesai(data, tuntas, tingkat) {
     'Unit tuntas : ' + tuntas + '\n' +
     'Nilai akhir : ' + (data.rata || 0) + ' (' + predikat(data.rata) + ')\n' +
     'Nilai unit  : ' + (data.unit || []).join(', ') + '\n';
-  MailApp.sendEmail(SUREL_MYBIPA + ',' + SUREL_ADMIN,
+  MailApp.sendEmail(SUREL_MYBIPA + ',' + ambilSurelAdmin(tkt),
     'MyBIPA ' + tkt + ' — ' + (data.nama || '') + ' menyelesaikan seluruh unit', pesan);
 }
 
