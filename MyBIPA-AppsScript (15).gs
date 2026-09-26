@@ -56,8 +56,8 @@ var SUREL_ADMIN_PER_TINGKAT = {
   'A2': 'sukmaradi333@gmail.com',
   'B1': 'rahmazilla447@gmail.com',  // Admin B1 & B2 (Bu Azilla Rahma)
   'B2': 'rahmazilla447@gmail.com',
-  'C1': 'sukmaradi333@gmail.com',   // Admin C1 & C2 (dapat disesuaikan)
-  'C2': 'sukmaradi333@gmail.com'
+  'C1': 'putriapikasari29@gmail.com', // Admin C1 & C2 (Bu Putri Apika Sari)
+  'C2': 'putriapikasari29@gmail.com'
 };
 
 function ambilSurelAdmin(tingkat) {
