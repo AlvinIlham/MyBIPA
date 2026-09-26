@@ -3029,6 +3029,64 @@ const AKHIR = [
   var URL_SINKRON = "https://script.google.com/macros/s/AKfycbzqjSvI1amxh-qJ5-1QcKehhUeLYyLerZ2VUz4TOW1Z5itoNICsGa-bnFmKbWwY3TfVaQ/exec";
   var ID_BASISDATA = "1wURIPGZ7jZwNJhAD8Jq_VmRMunvwIjl_TJWacII9bm8";
 
+  /* ==================================================================
+     AUTENTIKASI SUPABASE (LOGIN & DAFTAR CEPAT LINTAS PERANGKAT)
+     ================================================================== */
+  var SUPABASE_URL = "https://qfarpzxlyecookriwtdn.supabase.co";
+  var SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmYXJwenhseWVjb29rcml3dGRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0MTY1NzQsImV4cCI6MjEwNTk5MjU3NH0.31Ij0xCZBqdc2ihuIZhuzCiV9mEIJ1XRcIzEQ9MiarE";
+
+  function supabaseReq(path, method, body, callback) {
+    if (!SUPABASE_URL || !SUPABASE_ANON) {
+      if (callback) callback(false, null, "Konfigurasi basis data Supabase belum lengkap.");
+      return;
+    }
+    var headers = {
+      "apikey": SUPABASE_ANON,
+      "Authorization": "Bearer " + SUPABASE_ANON,
+      "Content-Type": "application/json"
+    };
+    if (method === "POST" || method === "PATCH") {
+      headers["Prefer"] = "resolution=merge-duplicates,return=representation";
+    }
+    fetch(SUPABASE_URL + "/rest/v1/" + path, {
+      method: method || "GET",
+      headers: headers,
+      body: body ? JSON.stringify(body) : undefined
+    })
+    .then(function (res) {
+      if (!res.ok) {
+        return res.json().then(function (err) {
+          throw new Error((err && err.message) || ("Galat " + res.status));
+        }).catch(function (e) {
+          throw new Error(e.message || ("Galat " + res.status));
+        });
+      }
+      return res.json().catch(function () { return null; });
+    })
+    .then(function (data) {
+      if (callback) callback(true, data);
+    })
+    .catch(function (err) {
+      if (callback) callback(false, null, err.message);
+    });
+  }
+
+  function supabaseSimpanAkun(dataAkun, lanjut) {
+    if (!SUPABASE_URL || !dataAkun || !dataAkun.surel) { if (lanjut) lanjut(false); return; }
+    var muatan = {
+      surel: (dataAkun.surel || "").toLowerCase().trim(),
+      nama: dataAkun.nama || "",
+      wa: dataAkun.wa || "-",
+      instansi: dataAkun.instansi || "",
+      dosen: dataAkun.dosen || "",
+      sandi: dataAkun.sandi || "",
+      peran: dataAkun.peran || "pemelajar"
+    };
+    supabaseReq("akun", "POST", muatan, function (sukses, res, err) {
+      if (lanjut) lanjut(sukses, err);
+    });
+  }
+
   var GUDANG_OK = (function () {
     try {
       var uji = "mybipa-uji-" + Date.now();
@@ -5323,33 +5381,57 @@ const AKHIR = [
     if (!nama || !wa || !surel || !instansi || !sandi) { pesan.textContent = "Semua kolom wajib diisi."; return; }
     if (sandi.length < 6) { pesan.textContent = "Kata sandi minimal enam karakter."; return; }
     if (sandi !== sandi2) { pesan.textContent = "Ulangan kata sandi belum sama."; return; }
-    if (DAFTAR_AKUN[surel]) { pesan.textContent = "Surel ini sudah terdaftar. Silakan gunakan menu Masuk."; return; }
-    var adaNama = Object.keys(DAFTAR_AKUN).some(function (k) {
-      return DAFTAR_AKUN[k].nama.toLowerCase() === nama.toLowerCase();
-    });
-    if (adaNama) { pesan.textContent = "Nama ini sudah dipakai. Tambahkan nama belakang agar berbeda."; return; }
     if (surel === SUREL_ADMIN) {
       pesan.textContent = "Surel ini tidak dapat dipakai untuk pendaftaran pemelajar."; return;
     }
     var peranPilih = document.getElementById("d-peran").value === "pengajar" ? "pengajar" : "pemelajar";
     var dosen = document.getElementById("d-dosen").value.trim();
-    DAFTAR_AKUN[surel] = {
-      nama: nama, wa: wa, surel: surel, instansi: instansi, dosen: dosen,
-      sandi: sandiAcak(sandi), peran: (surel === SUREL_ADMIN ? "admin" : peranPilih),
-      dibuat: new Date().toISOString()
-    };
-    tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
-    kirimSinkron({
-      aksi: "simpan", nama: nama, surel: surel, wa: wa, instansi: instansi,
-      dosen: dosen, peran: peranPilih, tingkat: "A1", unit: [], tuntas: 0, rata: 0,
-      lengkap: false, penuh: {},
-      sandi: sandiAcak(sandi),
-      catatan: "pendaftaran baru"
-    });
-    pesan.className = "gerbang-pesan baik";
-    pesan.textContent = "Akun dibuat. Selamat belajar, " + nama + ".";
-    AKUN = DAFTAR_AKUN[surel]; catatKegiatan("pendaftaran pemelajar", instansi); AKUN = null;
-    masukkanSesi(surel);
+    var tombol = document.querySelector("#form-daftar button[type='submit']");
+    if (tombol) tombol.disabled = true;
+    pesan.textContent = "Mendaftarkan akun...";
+
+    function selesaikanDaftar() {
+      var akunBaru = {
+        nama: nama, wa: wa, surel: surel, instansi: instansi, dosen: dosen,
+        sandi: sandiAcak(sandi), peran: (surel === SUREL_ADMIN ? "admin" : peranPilih),
+        dibuat: new Date().toISOString()
+      };
+      supabaseSimpanAkun(akunBaru, function (sukses) {
+        if (tombol) tombol.disabled = false;
+        DAFTAR_AKUN[surel] = akunBaru;
+        tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
+        kirimSinkron({
+          aksi: "simpan", nama: nama, surel: surel, wa: wa, instansi: instansi,
+          dosen: dosen, peran: peranPilih, tingkat: "A1", unit: [], tuntas: 0, rata: 0,
+          lengkap: false, penuh: {},
+          sandi: sandiAcak(sandi),
+          catatan: "pendaftaran baru"
+        });
+        pesan.className = "gerbang-pesan baik";
+        pesan.textContent = "Akun dibuat. Selamat belajar, " + nama + ".";
+        AKUN = DAFTAR_AKUN[surel]; catatKegiatan("pendaftaran pemelajar", instansi); AKUN = null;
+        masukkanSesi(surel);
+      });
+    }
+
+    if (SUPABASE_URL) {
+      var cekPath = "akun?or=(surel.eq." + encodeURIComponent(surel) + ",nama.ilike." + encodeURIComponent(nama) + ")";
+      supabaseReq(cekPath, "GET", null, function (ok, hasil) {
+        if (ok && hasil && hasil.length > 0) {
+          if (tombol) tombol.disabled = false;
+          var bentrok = hasil[0];
+          if (bentrok.surel.toLowerCase() === surel) {
+            pesan.textContent = "Surel ini sudah terdaftar. Silakan gunakan menu Masuk.";
+          } else {
+            pesan.textContent = "Nama ini sudah dipakai. Tambahkan nama belakang agar berbeda.";
+          }
+          return;
+        }
+        selesaikanDaftar();
+      });
+    } else {
+      selesaikanDaftar();
+    }
   }
   document.getElementById("form-daftar").addEventListener("submit", function (ev) {
     ev.preventDefault(); prosesDaftar();
@@ -5370,14 +5452,10 @@ const AKHIR = [
       if (DAFTAR_AKUN[k].nama.toLowerCase() === nama || k.toLowerCase() === nama) kunci = k;
     });
 
+    // 1. Cek lokal terlebih dahulu
     if (kunci && DAFTAR_AKUN[kunci].sandi === sandiH) {
+      if (SUPABASE_URL) supabaseSimpanAkun(DAFTAR_AKUN[kunci]);
       masukkanSesi(kunci);
-      return;
-    }
-
-    if (!URL_SINKRON) {
-      if (!kunci) { pesan.textContent = "Nama belum terdaftar. Silakan pilih Daftar baru."; return; }
-      if (DAFTAR_AKUN[kunci].sandi !== sandiH) { pesan.textContent = "Kata sandi belum tepat."; return; }
       return;
     }
 
@@ -5386,25 +5464,8 @@ const AKHIR = [
     var tombol = document.querySelector("#form-masuk button[type='submit']");
     if (tombol) tombol.disabled = true;
 
-    bacaBasisData({ aksi: "masuk", identitas: namaInput, sandi: sandiH }, function (j) {
-      if (tombol) tombol.disabled = false;
-      if (!j) {
-        if (!kunci) {
-          pesan.textContent = "Sambungan ke basis data terputus. Pastikan perangkat terhubung ke internet.";
-        } else {
-          pesan.textContent = "Kata sandi belum tepat.";
-        }
-        return;
-      }
-      if (!j.ok) {
-        pesan.textContent = j.pesan || "Nama atau kata sandi belum tepat.";
-        return;
-      }
-
-      var d = j.data || {};
+    function pulihkanDanMasuk(d) {
       var surel = (d.surel || "").toLowerCase().trim();
-      if (!surel) surel = (d.nama || "user").toLowerCase().replace(/[^a-z0-9]/g, "") + "@mybipa.user";
-
       DAFTAR_AKUN[surel] = {
         nama: d.nama || namaInput,
         wa: d.wa || "-",
@@ -5412,7 +5473,7 @@ const AKHIR = [
         instansi: d.instansi || "",
         dosen: d.dosen || "",
         sandi: sandiH,
-        peran: j.peran || d.peran || "pemelajar",
+        peran: d.peran || "pemelajar",
         dibuat: d.dibuat || new Date().toISOString()
       };
       tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
@@ -5443,10 +5504,72 @@ const AKHIR = [
         tulisGudang(kunciSimpan + "-timpa", penuh.timpa);
       }
 
+      // Pastikan akun tercatat di Supabase
+      if (SUPABASE_URL) supabaseSimpanAkun(DAFTAR_AKUN[surel]);
+
       pesan.className = "gerbang-pesan baik";
       pesan.textContent = "Berhasil masuk. Memuat ruang belajar...";
       masukkanSesi(surel);
-    });
+    }
+
+    // 2. Periksa ke Supabase (super cepat < 100ms)
+    if (SUPABASE_URL) {
+      var cariPath = "akun?or=(surel.eq." + encodeURIComponent(nama) + ",nama.ilike." + encodeURIComponent(namaInput) + ")";
+      supabaseReq(cariPath, "GET", null, function (ok, data) {
+        if (ok && data && data.length > 0) {
+          if (tombol) tombol.disabled = false;
+          var akunSupa = data[0];
+          if (akunSupa.sandi !== sandiH) {
+            pesan.textContent = "Kata sandi belum tepat.";
+            return;
+          }
+          // Ambil juga jawaban & rekap dari spreadsheet bila ada
+          if (URL_SINKRON) {
+            bacaBasisData({ surel: akunSupa.surel }, function (j) {
+              if (j && j.ok && j.data) {
+                akunSupa.penuh = j.data.penuh || {};
+                akunSupa.unit = j.data.unit || [];
+                akunSupa.tuntas = j.data.tuntas || 0;
+                akunSupa.rata = j.data.rata || 0;
+              }
+              pulihkanDanMasuk(akunSupa);
+            });
+          } else {
+            pulihkanDanMasuk(akunSupa);
+          }
+          return;
+        }
+
+        // 3. Fallback: jika belum ada di Supabase, cek Google Apps Script
+        cekKeGoogleAppsScript();
+      });
+    } else {
+      cekKeGoogleAppsScript();
+    }
+
+    function cekKeGoogleAppsScript() {
+      if (!URL_SINKRON) {
+        if (tombol) tombol.disabled = false;
+        if (!kunci) pesan.textContent = "Nama atau surel belum terdaftar. Silakan pilih Daftar baru.";
+        else pesan.textContent = "Kata sandi belum tepat.";
+        return;
+      }
+      bacaBasisData({ aksi: "masuk", identitas: namaInput, sandi: sandiH }, function (j) {
+        if (tombol) tombol.disabled = false;
+        if (!j) {
+          if (!kunci) pesan.textContent = "Sambungan basis data terputus. Pastikan perangkat terhubung ke internet.";
+          else pesan.textContent = "Kata sandi belum tepat.";
+          return;
+        }
+        if (!j.ok) {
+          pesan.textContent = j.pesan || "Nama atau kata sandi belum tepat.";
+          return;
+        }
+        var d = j.data || {};
+        d.sandi = sandiH;
+        pulihkanDanMasuk(d);
+      });
+    }
   }
   document.getElementById("form-masuk").addEventListener("submit", function (ev) {
     ev.preventDefault(); prosesMasuk();
@@ -5574,6 +5697,16 @@ const AKHIR = [
   /* --- kartu akun pada daftar isi --- */
   document.body.dataset.masuk = AKUN ? "ya" : "tidak";
   if (AKUN) catatKegiatan("masuk akun", AKUN.instansi || "");
+
+  /* Sinkronkan akun lokal yang ada ke Supabase agar otomatis bisa login di perangkat lain */
+  if (SUPABASE_URL) {
+    if (AKUN && AKUN.surel) supabaseSimpanAkun(AKUN);
+    Object.keys(DAFTAR_AKUN).forEach(function (k) {
+      if (DAFTAR_AKUN[k] && DAFTAR_AKUN[k].surel && DAFTAR_AKUN[k].sandi) {
+        supabaseSimpanAkun(DAFTAR_AKUN[k]);
+      }
+    });
+  }
   /* perangkat baru: bila belum ada jawaban tersimpan, kemajuan ditarik sendiri dari basis data */
   if (AKUN && URL_SINKRON && Object.keys(JAWAB).length === 0) {
     setTimeout(function () {
