@@ -342,14 +342,16 @@ function simpanPemelajar(data) {
   tulis('surel', data.surel || '');
   tulis('whatsapp', data.wa || '');
   tulis('pengajar', data.dosen || '');
-  tulis('predikat', tuntas >= JUMLAH_UNIT ? predikat(data.rata) : 'belum tuntas');
+  var batasUnit = (tingkatData === 'B2') ? 10 : JUMLAH_UNIT;
+  var selesai = (data.lengkap !== undefined) ? !!data.lengkap : (tuntas >= batasUnit);
+  tulis('predikat', selesai ? predikat(data.rata) : 'belum tuntas');
   tulis('unit tuntas', tuntas);
   tulis('diperbarui', new Date());
   tulis('data lengkap', JSON.stringify(data.penuh || {}).slice(0, 45000));
   if (data.sandi) tulis('kata sandi', String(data.sandi));
 
   if (baru && KIRIM_SUREL) kirimSurelBaru(data, tingkatData);
-  if (KIRIM_SUREL && tuntas >= JUMLAH_UNIT && rapi(data.catatan) !== 'masuk') {
+  if (KIRIM_SUREL && selesai && rapi(data.catatan) !== 'masuk') {
     kirimSurelSelesai(data, tuntas, tingkatData);
   }
 }
