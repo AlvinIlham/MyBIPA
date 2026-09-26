@@ -52,7 +52,7 @@ var LEMBAR_PENGAJAR  = 'Pengajar';
 var LEMBAR_AKTIVITAS = 'Aktivitas';
 
 var KOLOM_TAMBAHAN = ['Surel', 'WhatsApp', 'Pengajar', 'Predikat',
-                      'Unit Tuntas', 'Diperbarui', 'Data Lengkap'];
+                      'Unit Tuntas', 'Diperbarui', 'Data Lengkap', 'Kata Sandi'];
 
 /* ============================ PEMBANTU ============================== */
 
@@ -157,6 +157,8 @@ function doPost(e) {
       jawab = { ok: true, data: ambilPemelajar(data.surel) };
     } else if (aksi === 'kelas') {
       jawab = { ok: true, data: ambilKelas(data.dosen || '') };
+    } else if (aksi === 'masuk') {
+      jawab = verifikasiMasuk(data.identitas || data.nama || data.surel || '', data.sandi || '');
     } else {
       simpan(data);
       jawab = { ok: true };
@@ -174,6 +176,8 @@ function doGet(e) {
   try {
     if (par.aksi === 'kelas') {
       jawab = { ok: true, data: ambilKelas(par.dosen || '') };
+    } else if (par.aksi === 'masuk') {
+      jawab = verifikasiMasuk(par.identitas || par.nama || par.surel || '', par.sandi || '');
     } else if (par.aksi === 'simpan') {
       /* penyimpanan lewat doGet, dipakai bila pengiriman POST terhalang peramban */
       simpan(JSON.parse(par.data || '{}'));
@@ -265,6 +269,7 @@ function simpanPemelajar(data) {
   tulis('unit tuntas', tuntas);
   tulis('diperbarui', new Date());
   tulis('data lengkap', JSON.stringify(data.penuh || {}).slice(0, 45000));
+  if (data.sandi) tulis('kata sandi', String(data.sandi));
 
   if (baru && KIRIM_SUREL) kirimSurelBaru(data);
   if (KIRIM_SUREL && tuntas >= JUMLAH_UNIT && rapi(data.catatan) !== 'masuk') {
@@ -305,9 +310,12 @@ function simpanPengajar(data) {
   var idGuru = String(lembar.getRange(baris, 1).getValue()).trim();
   if (!idGuru) idGuru = 'G' + ('00' + (jumlahGuru + 1)).slice(-3);
 
+  var sandiLama = baris <= akhir ? String(lembar.getRange(baris, 6).getValue()).trim() : '';
+  var sandiPengajar = data.sandi || sandiLama || '(tersimpan pada peramban pengajar)';
+
   lembar.getRange(baris, 1, 1, 8).setValues([[
     idGuru, KODE_TINGKAT, TINGKAT_MODUL, data.nama || '',
-    data.surel || '', '(tersimpan pada peramban pengajar)', 'Pengajar', 'Aktif'
+    data.surel || '', sandiPengajar, 'Pengajar', 'Aktif'
   ]]);
 }
 
@@ -337,6 +345,9 @@ function bacaBaris(lembar, kolom, baris, denganData) {
     tingkat: ambil('tingkatan'), unit: unit,
     tuntas: Number(ambil('unit tuntas')) || 0, rata: Number(ambil('nilai akhir')) || 0
   };
+  if (kolom['kata sandi']) {
+    hasil.sandi = String(ambil('kata sandi') || '').trim();
+  }
   if (denganData) {
     try { hasil.penuh = JSON.parse(ambil('data lengkap') || '{}'); }
     catch (x) { hasil.penuh = {}; }
@@ -376,6 +387,103 @@ function ambilKelas(dosen) {
     hasil.push(bacaBaris(lembar, kolom, baris, false));
   }
   return hasil;
+}
+
+/** Verifikasi login pemelajar atau pengajar secara online dari perangkat mana pun. */
+function verifikasiMasuk(identitas, sandiHash) {
+  var id = rapi(identitas);
+  if (!id) return { ok: false, pesan: 'Nama atau surel wajib diisi.' };
+  if (!sandiHash) return { ok: false, pesan: 'Kata sandi wajib diisi.' };
+
+  // 1. Periksa lembar Pemelajar (berdasarkan nama lengkap atau surel)
+  var p = petaPemelajar();
+  var lembar = p.lembar, kolom = p.kolom;
+  var akhir = lembar.getLastRow();
+  var baris = 0;
+
+  if (akhir >= p.awalData) {
+    var colNama = kolom['nama pemelajar'] || 2;
+    var colSurel = kolom['surel'];
+    var dataNama = lembar.getRange(p.awalData, colNama, akhir - p.awalData + 1, 1).getValues();
+    var dataSurel = colSurel
+      ? lembar.getRange(p.awalData, colSurel, akhir - p.awalData + 1, 1).getValues()
+      : [];
+
+    for (var i = 0; i < dataNama.length; i++) {
+      var n = rapi(dataNama[i][0]);
+      var s = dataSurel.length ? rapi(dataSurel[i][0]) : '';
+      if ((n && n === id) || (s && s === id)) {
+        baris = p.awalData + i;
+        break;
+      }
+    }
+  }
+
+  if (baris) {
+    var colSandi = kolom['kata sandi'];
+    var sandiDiSheet = colSandi ? String(lembar.getRange(baris, colSandi).getValue()).trim() : '';
+
+    if (!sandiDiSheet) {
+      // Akun lama yang belum tercatat sandinya di spreadsheet:
+      // Daftarkan sandi yang dimasukkan sekarang agar multi-device langsung aktif
+      if (colSandi) {
+        lembar.getRange(baris, colSandi).setValue(sandiHash);
+        SpreadsheetApp.flush();
+      }
+    } else if (sandiDiSheet !== sandiHash) {
+      return { ok: false, pesan: 'Kata sandi belum tepat.' };
+    }
+
+    var dataPemelajar = bacaBaris(lembar, kolom, baris, true);
+    dataPemelajar.sandi = sandiHash;
+    dataPemelajar.peran = 'pemelajar';
+    catat({ nama: dataPemelajar.nama, surel: dataPemelajar.surel, dosen: dataPemelajar.dosen, catatan: 'masuk akun' }, 'pemelajar');
+    return { ok: true, peran: 'pemelajar', data: dataPemelajar };
+  }
+
+  // 2. Periksa lembar Pengajar
+  var b = berkas();
+  var lembarG = b.getSheetByName(LEMBAR_PENGAJAR);
+  if (lembarG) {
+    var jG = barisJudul(lembarG, 'id guru');
+    if (jG) {
+      var awalG = jG + 1;
+      var akhirG = lembarG.getLastRow();
+      if (akhirG >= awalG) {
+        var isiG = lembarG.getRange(awalG, 1, akhirG - awalG + 1, 8).getValues();
+        for (var g = 0; g < isiG.length; g++) {
+          var namaG = rapi(isiG[g][3]);
+          var surelG = rapi(isiG[g][4]);
+          if ((namaG && namaG === id) || (surelG && surelG === id)) {
+            var sandiG = String(isiG[g][5]).trim();
+            if (!sandiG || sandiG === '(tersimpan pada peramban pengajar)') {
+              lembarG.getRange(awalG + g, 6).setValue(sandiHash);
+              SpreadsheetApp.flush();
+            } else if (sandiG !== sandiHash) {
+              return { ok: false, pesan: 'Kata sandi belum tepat.' };
+            }
+            var dataPengajar = {
+              nama: isiG[g][3],
+              surel: isiG[g][4],
+              wa: '-',
+              instansi: 'Pengajar BIPA',
+              dosen: '',
+              sandi: sandiHash,
+              peran: 'pengajar'
+            };
+            catat({ nama: dataPengajar.nama, surel: dataPengajar.surel, catatan: 'masuk akun' }, 'pengajar');
+            return {
+              ok: true,
+              peran: 'pengajar',
+              data: dataPengajar
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return { ok: false, pesan: 'Nama atau surel belum terdaftar. Silakan pilih Daftar baru.' };
 }
 
 /* ============================ SUREL ================================= */
