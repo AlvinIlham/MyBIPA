@@ -50,6 +50,7 @@ var KIRIM_SUREL  = true;      // ubah ke false bila pemberitahuan surel tidak di
 var LEMBAR_PEMELAJAR = 'Pemelajar';
 var LEMBAR_PENGAJAR  = 'Pengajar';
 var LEMBAR_AKTIVITAS = 'Aktivitas';
+var LEMBAR_AKUN      = 'Akun';   // lembar autentikasi cloud
 
 var KOLOM_TAMBAHAN = ['Surel', 'WhatsApp', 'Pengajar', 'Predikat',
                       'Unit Tuntas', 'Diperbarui', 'Data Lengkap'];
@@ -146,6 +147,168 @@ function lembarAktivitas() {
   return lembar;
 }
 
+/* ============================ AUTENTIKASI CLOUD ==================== */
+
+/**
+ * Menyiapkan Lembar Akun sebagai sumber kebenaran autentikasi.
+ * Kolom: Surel | Nama | Sandi* | Peran | WhatsApp | Instansi | Pengajar | Dibuat | Diperbarui
+ * Sandi* disimpan sebagai hash SHA-256, bukan plaintext.
+ */
+function siapkanLembarAkun() {
+  var b = berkas();
+  var lembar = b.getSheetByName(LEMBAR_AKUN);
+  if (!lembar) {
+    lembar = b.insertSheet(LEMBAR_AKUN);
+    var kepala = ['Surel', 'Nama', 'Sandi*', 'Peran', 'WhatsApp',
+                  'Instansi', 'Pengajar', 'Dibuat', 'Diperbarui'];
+    lembar.getRange(1, 1, 1, kepala.length).setValues([kepala]).setFontWeight('bold');
+    lembar.setFrozenRows(1);
+    lembar.getRange('A:A').setNumberFormat('@');
+    SpreadsheetApp.flush();
+  }
+  return lembar;
+}
+
+/** Hash SHA-256 string menjadi hex 64 karakter. */
+function hashSandi(teks) {
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    teks,
+    Utilities.Charset.UTF_8
+  );
+  return bytes.map(function (b) {
+    var h = (b < 0 ? b + 256 : b).toString(16);
+    return h.length === 1 ? '0' + h : h;
+  }).join('');
+}
+
+/** Cari baris akun berdasarkan surel. Kembalikan nomor baris (1-indexed) atau 0. */
+function cariBarisAkun(lembar, surel) {
+  var akhir = lembar.getLastRow();
+  if (akhir < 2) return 0;
+  var daftar = lembar.getRange(2, 1, akhir - 1, 1).getValues();
+  var cari = rapi(surel);
+  for (var i = 0; i < daftar.length; i++) {
+    if (rapi(daftar[i][0]) === cari) return i + 2;
+  }
+  return 0;
+}
+
+/**
+ * Mendaftarkan akun baru. Kembalikan { ok, pesan, peran, nama, surel, ... }.
+ */
+function daftarAkun(data) {
+  var lembar  = siapkanLembarAkun();
+  var surel   = rapi(data.surel);
+  var nama    = String(data.nama    || '').trim();
+  var sandi   = String(data.sandi   || '');
+  var peran   = rapi(data.peran)    || 'pemelajar';
+  var wa      = String(data.wa      || '-').trim();
+  var instansi = String(data.instansi || '').trim();
+  var dosen   = String(data.dosen   || '').trim();
+
+  if (!surel || !nama || !sandi) throw new Error('Surel, nama, dan sandi wajib diisi.');
+  if (sandi.length < 6) throw new Error('Sandi minimal 6 karakter.');
+
+  if (cariBarisAkun(lembar, surel)) {
+    return { ok: false, pesan: 'Surel ini sudah terdaftar. Silakan masuk.' };
+  }
+  if (peran === 'pemelajar') {
+    var akhir = lembar.getLastRow();
+    if (akhir >= 2) {
+      var semua = lembar.getRange(2, 2, akhir - 1, 1).getValues();
+      for (var i = 0; i < semua.length; i++) {
+        if (rapi(semua[i][0]) === rapi(nama)) {
+          return { ok: false, pesan: 'Nama ini sudah dipakai. Tambahkan nama belakang agar berbeda.' };
+        }
+      }
+    }
+  }
+
+  var sekarang = new Date();
+  lembar.appendRow([surel, nama, hashSandi(sandi), peran, wa, instansi, dosen, sekarang, sekarang]);
+  SpreadsheetApp.flush();
+  return { ok: true, pesan: 'Akun berhasil dibuat.', peran: peran,
+           nama: nama, surel: surel, instansi: instansi, wa: wa, dosen: dosen };
+}
+
+/**
+ * Verifikasi masuk akun (pemelajar login pakai nama, pengajar pakai surel).
+ * Kembalikan { ok, peran, nama, surel, instansi, wa, dosen } atau { ok: false, pesan }.
+ */
+function verifikasiAkun(data) {
+  var lembar = siapkanLembarAkun();
+  var surel  = rapi(data.surel  || '');
+  var sandi  = String(data.sandi || '');
+  var nama   = rapi(data.nama   || '');
+
+  var baris = 0;
+  if (surel) {
+    baris = cariBarisAkun(lembar, surel);
+  } else if (nama) {
+    var akhir = lembar.getLastRow();
+    if (akhir >= 2) {
+      var semua = lembar.getRange(2, 1, akhir - 1, 4).getValues();
+      for (var i = 0; i < semua.length; i++) {
+        if (rapi(semua[i][1]) === nama) { baris = i + 2; surel = rapi(semua[i][0]); break; }
+      }
+    }
+  }
+
+  if (!baris) return { ok: false, pesan: 'Nama atau surel belum terdaftar. Silakan daftar terlebih dahulu.' };
+
+  var baris_data = lembar.getRange(baris, 1, 1, 9).getValues()[0];
+  if (hashSandi(sandi) !== String(baris_data[2])) {
+    return { ok: false, pesan: 'Kata sandi belum tepat.' };
+  }
+
+  lembar.getRange(baris, 9).setValue(new Date());
+  return {
+    ok: true, surel: String(baris_data[0]), nama: String(baris_data[1]),
+    peran: String(baris_data[3]), wa: String(baris_data[4]),
+    instansi: String(baris_data[5]), dosen: String(baris_data[6])
+  };
+}
+
+/**
+ * Mendaftarkan atau memperbarui akun pengajar.
+ * Jika surel sudah ada → verifikasi sandi; jika belum → buat baru.
+ */
+function daftarPengajar(data) {
+  var lembar   = siapkanLembarAkun();
+  var surel    = rapi(data.surel || '');
+  var nama     = String(data.nama     || '').trim();
+  var sandi    = String(data.sandi    || '');
+  var instansi = String(data.instansi || '').trim();
+
+  if (!surel || !nama || !sandi) throw new Error('Nama, surel, dan sandi wajib diisi.');
+
+  var baris = cariBarisAkun(lembar, surel);
+  if (baris) {
+    var baris_data = lembar.getRange(baris, 1, 1, 9).getValues()[0];
+    if (hashSandi(sandi) !== String(baris_data[2])) {
+      return { ok: false, pesan: 'Kata sandi belum tepat.' };
+    }
+    if (rapi(baris_data[3]) === 'pemelajar') {
+      return { ok: false, pesan: 'Surel ini terdaftar sebagai pemelajar. Gunakan tab Masuk.' };
+    }
+    if (nama) lembar.getRange(baris, 2).setValue(nama);
+    if (instansi) lembar.getRange(baris, 6).setValue(instansi);
+    lembar.getRange(baris, 9).setValue(new Date());
+    return { ok: true, surel: surel, nama: nama || String(baris_data[1]),
+             peran: 'pengajar', instansi: instansi || String(baris_data[5]),
+             wa: String(baris_data[4]), dosen: String(baris_data[6]) };
+  }
+
+  if (sandi.length < 6) throw new Error('Sandi minimal 6 karakter.');
+  if (!instansi) throw new Error('Asal kampus atau instansi wajib diisi pada pendaftaran pertama.');
+  var sekarang = new Date();
+  lembar.appendRow([surel, nama, hashSandi(sandi), 'pengajar', '-', instansi, '', sekarang, sekarang]);
+  SpreadsheetApp.flush();
+  return { ok: true, surel: surel, nama: nama, peran: 'pengajar',
+           instansi: instansi, wa: '-', dosen: '' };
+}
+
 /* ============================ PENERIMA ============================== */
 
 function doPost(e) {
@@ -157,6 +320,12 @@ function doPost(e) {
       jawab = { ok: true, data: ambilPemelajar(data.surel) };
     } else if (aksi === 'kelas') {
       jawab = { ok: true, data: ambilKelas(data.dosen || '') };
+    } else if (aksi === 'daftar') {
+      jawab = daftarAkun(data);
+    } else if (aksi === 'masuk') {
+      jawab = verifikasiAkun(data);
+    } else if (aksi === 'daftar-pengajar') {
+      jawab = daftarPengajar(data);
     } else {
       simpan(data);
       jawab = { ok: true };
@@ -178,6 +347,15 @@ function doGet(e) {
       /* penyimpanan lewat doGet, dipakai bila pengiriman POST terhalang peramban */
       simpan(JSON.parse(par.data || '{}'));
       jawab = { ok: true };
+    } else if (par.aksi === 'masuk') {
+      /* JSONP: verifikasi masuk akun */
+      jawab = verifikasiAkun({ nama: par.nama || '', surel: par.surel || '', sandi: par.sandi || '' });
+    } else if (par.aksi === 'daftar') {
+      /* JSONP: pendaftaran akun baru */
+      jawab = daftarAkun(JSON.parse(par.data || '{}'));
+    } else if (par.aksi === 'daftar-pengajar') {
+      /* JSONP: pendaftaran atau masuk pengajar */
+      jawab = daftarPengajar(JSON.parse(par.data || '{}'));
     } else if (par.surel) {
       jawab = { ok: true, data: ambilPemelajar(par.surel) };
     } else {
@@ -407,6 +585,25 @@ function kirimSurelSelesai(data, tuntas) {
 }
 
 /* ============================ PENGUJIAN ============================= */
+
+/** Uji fungsi autentikasi cloud secara langsung dari editor. */
+function ujiAuth() {
+  var hasilDaftar = daftarAkun({
+    surel: 'uji-auth@mybipa.test', nama: 'Uji Auth Cloud', sandi: 'sandi123',
+    peran: 'pemelajar', wa: '0812', instansi: 'Uji Coba', dosen: ''
+  });
+  Logger.log('Daftar: ' + JSON.stringify(hasilDaftar));
+
+  var hasilMasuk = verifikasiAkun({ nama: 'uji auth cloud', sandi: 'sandi123' });
+  Logger.log('Masuk (benar): ' + JSON.stringify(hasilMasuk));
+
+  var hasilSalah = verifikasiAkun({ nama: 'uji auth cloud', sandi: 'salah' });
+  Logger.log('Masuk (salah): ' + JSON.stringify(hasilSalah));
+
+  var lembar = siapkanLembarAkun();
+  var barisUji = cariBarisAkun(lembar, 'uji-auth@mybipa.test');
+  if (barisUji) { lembar.deleteRow(barisUji); Logger.log('Baris uji auth dihapus.'); }
+}
 
 /** Jalankan sekali dari editor untuk memastikan sambungan berjalan. */
 function ujiSambungan() {

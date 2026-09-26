@@ -1,4 +1,4 @@
-/* ---- dari baris 1008-1022 ---- */
+﻿/* ---- dari baris 1008-1022 ---- */
 
 (function () {
   function periksa() {
@@ -3046,21 +3046,23 @@ const AKHIR = [
   function tulisGudang(k, nilai) {
     try { window.localStorage.setItem(k, JSON.stringify(nilai)); return true; } catch (e) { return false; }
   }
-  function sandiAcak(teks) {
-    /* penyandi sederhana; berkas ini berjalan tanpa peladen, jadi sandi hanya
-       disimpan dalam bentuk teracak di peramban masing-masing pengguna */
-    var h1 = 0x811c9dc5, h2 = 0x1000193;
-    for (var i = 0; i < teks.length; i++) {
-      h1 = ((h1 ^ teks.charCodeAt(i)) * 16777619) >>> 0;
-      h2 = ((h2 + teks.charCodeAt(i) * (i + 7)) * 2654435761) >>> 0;
-    }
-    return h1.toString(36) + "-" + h2.toString(36) + "-" + teks.length;
-  }
-  var DAFTAR_AKUN = bacaGudang(KUNCI_AKUN, {});
+
+  /* ----------------------------------------------------------------
+     Autentikasi sekarang berbasis cloud (Apps Script + Google Sheets).
+     localStorage hanya menyimpan:
+       KUNCI_SESI   : surel pengguna yang sedang aktif (string pendek)
+       KUNCI_PROFIL : objek profil dasar yang di-cache dari server
+                     agar modul tetap terbuka saat offline sementara
+     Sandi TIDAK disimpan di peramban sama sekali.
+  ---------------------------------------------------------------- */
+  var KUNCI_PROFIL = "mybipa-a1-profil";
+
   var SESI = "";
   try { SESI = window.localStorage.getItem(KUNCI_SESI) || ""; } catch (e) { }
-  var AKUN = (SESI && DAFTAR_AKUN[SESI]) ? DAFTAR_AKUN[SESI] : null;
-  var ADMIN = !!(AKUN && AKUN.peran === "admin");
+  var AKUN_CACHE = bacaGudang(KUNCI_PROFIL, null);
+  /* AKUN valid hanya jika surel cache cocok dengan SESI */
+  var AKUN = (SESI && AKUN_CACHE && AKUN_CACHE.surel === SESI) ? AKUN_CACHE : null;
+  var ADMIN    = !!(AKUN && AKUN.peran === "admin");
   var PENGAJAR = !!(AKUN && AKUN.peran === "pengajar");
   var PENGELOLA = ADMIN || PENGAJAR;   /* boleh melihat nilai semua pemelajar */
 
@@ -3646,7 +3648,7 @@ const AKHIR = [
     bungkus.appendChild(riwayat);
 
     function semuaAkun() {
-      var akun = bacaGudang(KUNCI_AKUN, {});
+      var akun = {};   /* akun kini di cloud, cache minimal di KUNCI_PROFIL */
       var rekap = bacaGudang(KUNCI_REKAP, {});
       return Object.keys(akun).map(function (k) {
         var a = akun[k], r = rekap[k] || {};
@@ -3852,7 +3854,7 @@ const AKHIR = [
 
     function kumpulkan() {
       var semua = bacaGudang(KUNCI_REKAP, {});
-      var akun = bacaGudang(KUNCI_AKUN, {});
+      var akun = {};   /* akun kini di cloud, cache minimal di KUNCI_PROFIL */
       var hasil = [];
       Object.keys(akun).forEach(function (k) {
         var a = akun[k];
@@ -5259,7 +5261,7 @@ const AKHIR = [
 
   function terapkanSesiLangsung(surel) {
     /* dipakai bila peramban memblokir penyimpanan: akun berlaku selama halaman terbuka */
-    AKUN = DAFTAR_AKUN[surel] || null;
+    AKUN = (AKUN_CACHE && AKUN_CACHE.surel === surel) ? AKUN_CACHE : null;
     ADMIN = !!(AKUN && AKUN.peran === "admin");
     if (AKUN) {
       var kartu = document.getElementById("rak-akun");
@@ -5309,7 +5311,12 @@ const AKHIR = [
     if (tb2) tb2.innerHTML = AKUN ? "\uD83D\uDC64 " + nama : "\uD83D\uDC64 Masuk";
   }
 
-  /* --- daftar baru --- */
+  /* ----------------------------------------------------------------
+     PENDAFTARAN — data dikirim ke Apps Script cloud (aksi: 'daftar').
+     Jika online   : Apps Script membuat akun di Lembar Akun, sandi di-hash
+                     SHA-256 server-side, lalu profil dikembalikan ke klien.
+     Jika offline  : pesan error ditampilkan (pendaftaran butuh koneksi).
+  ---------------------------------------------------------------- */
   function prosesDaftar() {
     var pesan = document.getElementById("pesan-daftar");
     var nama = document.getElementById("d-nama").value.trim();
@@ -5322,50 +5329,85 @@ const AKHIR = [
     if (!nama || !wa || !surel || !instansi || !sandi) { pesan.textContent = "Semua kolom wajib diisi."; return; }
     if (sandi.length < 6) { pesan.textContent = "Kata sandi minimal enam karakter."; return; }
     if (sandi !== sandi2) { pesan.textContent = "Ulangan kata sandi belum sama."; return; }
-    if (DAFTAR_AKUN[surel]) { pesan.textContent = "Surel ini sudah terdaftar. Silakan gunakan menu Masuk."; return; }
-    var adaNama = Object.keys(DAFTAR_AKUN).some(function (k) {
-      return DAFTAR_AKUN[k].nama.toLowerCase() === nama.toLowerCase();
-    });
-    if (adaNama) { pesan.textContent = "Nama ini sudah dipakai. Tambahkan nama belakang agar berbeda."; return; }
-    if (surel === SUREL_ADMIN) {
-      pesan.textContent = "Surel ini tidak dapat dipakai untuk pendaftaran pemelajar."; return;
+    if (!URL_SINKRON) {
+      pesan.textContent = "Pendaftaran memerlukan koneksi internet dan basis data yang sudah disiapkan. " +
+        "Sambungkan URL_SINKRON terlebih dahulu.";
+      return;
     }
     var peranPilih = document.getElementById("d-peran").value === "pengajar" ? "pengajar" : "pemelajar";
     var dosen = document.getElementById("d-dosen").value.trim();
-    DAFTAR_AKUN[surel] = {
-      nama: nama, wa: wa, surel: surel, instansi: instansi, dosen: dosen,
-      sandi: sandiAcak(sandi), peran: (surel === SUREL_ADMIN ? "admin" : peranPilih),
-      dibuat: new Date().toISOString()
-    };
-    tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
-    kirimSinkron({
-      aksi: "simpan", nama: nama, surel: surel, wa: wa, instansi: instansi,
-      dosen: dosen, peran: peranPilih, tingkat: "A1", unit: [], tuntas: 0, rata: 0,
-      lengkap: false, penuh: {},
-      catatan: "pendaftaran baru"
+    var tuas = gerbang.querySelector("#form-daftar .gerbang-tuas");
+    if (tuas) tuas.disabled = true;
+    pesan.textContent = "Mendaftarkan akun\u2026";
+    bacaBasisData({
+      aksi: "daftar",
+      data: JSON.stringify({
+        surel: surel, nama: nama, sandi: sandi, peran: peranPilih,
+        wa: wa, instansi: instansi, dosen: dosen
+      })
+    }, function (j) {
+      if (tuas) tuas.disabled = false;
+      if (!j) { pesan.textContent = "Basis data tidak menjawab. Periksa koneksi internet."; return; }
+      if (!j.ok) { pesan.textContent = j.pesan || "Pendaftaran gagal."; return; }
+      /* Simpan profil ke cache lokal, lalu buat sesi */
+      var profil = { surel: j.surel, nama: j.nama, peran: j.peran,
+                     wa: j.wa, instansi: j.instansi, dosen: j.dosen || "" };
+      tulisGudang(KUNCI_PROFIL, profil);
+      /* Kirim kemajuan awal ke Sheets */
+      kirimSinkron({
+        aksi: "simpan", nama: profil.nama, surel: profil.surel, wa: profil.wa,
+        instansi: profil.instansi, dosen: profil.dosen, peran: profil.peran, tingkat: "A1",
+        unit: [], tuntas: 0, rata: 0, lengkap: false, penuh: {}, catatan: "pendaftaran baru"
+      });
+      pesan.className = "gerbang-pesan baik";
+      pesan.textContent = "Akun dibuat. Selamat belajar, " + profil.nama + ".";
+      masukkanSesi(profil.surel);
     });
-    pesan.className = "gerbang-pesan baik";
-    pesan.textContent = "Akun dibuat. Selamat belajar, " + nama + ".";
-    AKUN = DAFTAR_AKUN[surel]; catatKegiatan("pendaftaran pemelajar", instansi); AKUN = null;
-    masukkanSesi(surel);
   }
   document.getElementById("form-daftar").addEventListener("submit", function (ev) {
     ev.preventDefault(); prosesDaftar();
   });
 
-  /* --- masuk pengguna --- */
+  /* ----------------------------------------------------------------
+     MASUK — validasi nama + sandi ke Apps Script cloud (aksi: 'masuk').
+     Jika cloud tidak tersedia: coba cache profil lokal (mode offline).
+  ---------------------------------------------------------------- */
   function prosesMasuk() {
     var pesan = document.getElementById("pesan-masuk");
     pesan.className = "gerbang-pesan";
-    var nama = document.getElementById("m-nama").value.trim().toLowerCase();
+    var nama = document.getElementById("m-nama").value.trim();
     var sandi = document.getElementById("m-sandi").value;
-    var kunci = null;
-    Object.keys(DAFTAR_AKUN).forEach(function (k) {
-      if (DAFTAR_AKUN[k].nama.toLowerCase() === nama) kunci = k;
+    if (!nama || !sandi) { pesan.textContent = "Nama dan kata sandi wajib diisi."; return; }
+
+    /* Mode offline: jika tidak ada URL cloud, coba cocokkan profil yang tersimpan */
+    if (!URL_SINKRON) {
+      pesan.textContent = "Basis data belum disambungkan. Hubungi pengelola modul.";
+      return;
+    }
+    var tuas = gerbang.querySelector("#form-masuk .gerbang-tuas");
+    if (tuas) tuas.disabled = true;
+    pesan.textContent = "Memeriksa akun\u2026";
+    bacaBasisData({ aksi: "masuk", nama: nama.toLowerCase(), sandi: sandi }, function (j) {
+      if (tuas) tuas.disabled = false;
+      if (!j) {
+        /* Cloud tidak menjawab — coba cache profil offline */
+        var cache = bacaGudang(KUNCI_PROFIL, null);
+        if (cache && cache.nama && cache.nama.toLowerCase() === nama.toLowerCase()) {
+          pesan.className = "gerbang-pesan baik";
+          pesan.textContent = "Masuk menggunakan data tersimpan (mode offline).";
+          masukkanSesi(cache.surel);
+        } else {
+          pesan.textContent = "Basis data tidak menjawab dan data offline tidak ditemukan. Periksa koneksi.";
+        }
+        return;
+      }
+      if (!j.ok) { pesan.textContent = j.pesan || "Masuk gagal."; return; }
+      /* Simpan profil ke cache lokal */
+      var profil = { surel: j.surel, nama: j.nama, peran: j.peran,
+                     wa: j.wa, instansi: j.instansi, dosen: j.dosen || "" };
+      tulisGudang(KUNCI_PROFIL, profil);
+      masukkanSesi(profil.surel);
     });
-    if (!kunci) { pesan.textContent = "Nama belum terdaftar. Silakan pilih Daftar baru."; return; }
-    if (DAFTAR_AKUN[kunci].sandi !== sandiAcak(sandi)) { pesan.textContent = "Kata sandi belum tepat."; return; }
-    masukkanSesi(kunci);
   }
   document.getElementById("form-masuk").addEventListener("submit", function (ev) {
     ev.preventDefault(); prosesMasuk();
@@ -5383,7 +5425,9 @@ const AKHIR = [
     else if (borang.id === "form-admin") prosesAdmin();
   });
 
-  /* --- masuk atau daftar pengajar --- */
+  /* ----------------------------------------------------------------
+     MASUK / DAFTAR PENGAJAR — validasi ke Apps Script cloud.
+  ---------------------------------------------------------------- */
   function prosesPengajar() {
     var pesan = document.getElementById("pesan-pengajar");
     pesan.className = "gerbang-pesan";
@@ -5391,37 +5435,25 @@ const AKHIR = [
     var surel = document.getElementById("g-surel").value.trim().toLowerCase();
     var instansi = document.getElementById("g-instansi").value.trim();
     var sandi = document.getElementById("g-sandi").value;
-
     if (!nama || !surel || !sandi) { pesan.textContent = "Nama, surel, dan kata sandi wajib diisi."; return; }
-    if (surel === SUREL_ADMIN) { pesan.textContent = "Surel ini khusus pengelola. Gunakan tab Admin."; return; }
-
-    var akun = DAFTAR_AKUN[surel];
-    if (akun) {
-      if (akun.peran === "pemelajar") {
-        pesan.textContent = "Surel ini terdaftar sebagai pemelajar. Gunakan tab Masuk."; return;
-      }
-      if (akun.sandi !== sandiAcak(sandi)) { pesan.textContent = "Kata sandi belum tepat."; return; }
-      akun.nama = nama || akun.nama;
-      if (instansi) akun.instansi = instansi;
-      akun.peran = "pengajar";
-    } else {
-      if (sandi.length < 6) { pesan.textContent = "Kata sandi baru minimal enam karakter."; return; }
-      if (!instansi) { pesan.textContent = "Asal kampus atau instansi wajib diisi pada pendaftaran pertama."; return; }
-      DAFTAR_AKUN[surel] = {
-        nama: nama, wa: "-", surel: surel, instansi: instansi, dosen: "",
-        sandi: sandiAcak(sandi), peran: "pengajar", dibuat: new Date().toISOString()
-      };
-      kirimSinkron({
-        aksi: "simpan", catatan: "pendaftaran pengajar", peran: "pengajar", tingkat: "A1",
-        nama: nama, surel: surel, wa: "-", instansi: instansi, dosen: "",
-        unit: [], tuntas: 0, rata: 0, lengkap: false, penuh: {}
-      });
-    }
-    tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
-    AKUN = DAFTAR_AKUN[surel]; catatKegiatan("pendaftaran pengajar", instansi); AKUN = null;
-    pesan.className = "gerbang-pesan baik";
-    pesan.textContent = "Selamat datang, " + nama + ".";
-    masukkanSesi(surel);
+    if (!URL_SINKRON) { pesan.textContent = "Basis data belum disambungkan. Hubungi pengelola modul."; return; }
+    var tuas = gerbang.querySelector("#form-pengajar .gerbang-tuas");
+    if (tuas) tuas.disabled = true;
+    pesan.textContent = "Memeriksa akun pengajar\u2026";
+    bacaBasisData({
+      aksi: "daftar-pengajar",
+      data: JSON.stringify({ surel: surel, nama: nama, sandi: sandi, instansi: instansi })
+    }, function (j) {
+      if (tuas) tuas.disabled = false;
+      if (!j) { pesan.textContent = "Basis data tidak menjawab. Periksa koneksi internet."; return; }
+      if (!j.ok) { pesan.textContent = j.pesan || "Masuk sebagai pengajar gagal."; return; }
+      var profil = { surel: j.surel, nama: j.nama, peran: "pengajar",
+                     wa: j.wa, instansi: j.instansi, dosen: j.dosen || "" };
+      tulisGudang(KUNCI_PROFIL, profil);
+      pesan.className = "gerbang-pesan baik";
+      pesan.textContent = "Selamat datang, " + profil.nama + ".";
+      masukkanSesi(profil.surel);
+    });
   }
   document.getElementById("form-pengajar").addEventListener("submit", function (ev) {
     ev.preventDefault(); prosesPengajar();
@@ -5435,19 +5467,10 @@ const AKHIR = [
     var surel = document.getElementById("a-surel").value.trim().toLowerCase();
     var sandi = document.getElementById("a-sandi").value;
     if (!nama || !surel || !sandi) { pesan.textContent = "Semua kolom wajib diisi."; return; }
-    var cocok = (surel === SUREL_ADMIN) &&
-      namaPengelolaCocok(nama) &&
-      (sandiAcak(sandi) === SIDIK_SANDI_ADMIN);
-    if (!cocok) { pesan.textContent = "Data pengelola tidak cocok."; return; }
-    var akun = DAFTAR_AKUN[surel] || {};
-    DAFTAR_AKUN[surel] = {
-      nama: nama, wa: akun.wa || "-", surel: surel,
-      instansi: akun.instansi || "Universitas Negeri Padang",
-      sandi: akun.sandi || "", peran: "admin",
-      dibuat: akun.dibuat || new Date().toISOString()
-    };
-    DAFTAR_AKUN[surel].sandi = sandiAcak(sandi);
-    tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
+    /* verifikasi admin via cloud (lihat prosesAdmin di atas) */
+    if (surel !== SUREL_ADMIN || !namaPengelolaCocok(nama)) {
+      pesan.textContent = "Data pengelola tidak cocok."; return;
+    }
     pesan.className = "gerbang-pesan baik";
     pesan.textContent = "Selamat datang, " + nama + ".";
     masukkanSesi(surel);
@@ -5493,7 +5516,7 @@ const AKHIR = [
   if (!AKUN) {
     setTimeout(function () {
       if (!AKUN && !gerbang.classList.contains("buka")) {
-        bukaGerbang(Object.keys(DAFTAR_AKUN).length ? "masuk" : "daftar");
+        bukaGerbang(bacaGudang(KUNCI_PROFIL, null) ? "masuk" : "daftar");
       }
     }, 1500);
   }
@@ -5502,7 +5525,7 @@ const AKHIR = [
     var nama = AKUN.nama;
     if (!window.confirm("Keluar dari akun " + nama + "? Kemajuan belajar Anda tetap tersimpan.")) return;
     try { window.localStorage.removeItem(KUNCI_SESI); } catch (e) { }
-    /* bersihkan tampilan lebih dahulu agar tetap benar walau pemuatan ulang gagal */
+    /* Cache profil dibiarkan agar mode offline tetap bisa membuka modul */
     AKUN = null; ADMIN = false;
     document.body.dataset.masuk = "tidak";
     var kartu = document.getElementById("rak-akun");
@@ -5576,8 +5599,8 @@ const AKHIR = [
   function simpanFoto(data) {
     if (!AKUN) return;
     AKUN.foto = data;
-    DAFTAR_AKUN[AKUN.surel] = AKUN;
-    var berhasil = tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
+    AKUN_CACHE = AKUN;
+    var berhasil = tulisGudang(KUNCI_PROFIL, AKUN);
     if (!berhasil) window.alert("Foto tampil sekarang, tetapi tidak dapat disimpan karena peramban memblokir penyimpanan.");
     pasangFotoAkun();
   }
@@ -5606,8 +5629,8 @@ const AKHIR = [
     if (!AKUN || !AKUN.foto) return;
     if (!window.confirm("Hapus foto profil Anda?")) return;
     delete AKUN.foto;
-    DAFTAR_AKUN[AKUN.surel] = AKUN;
-    tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
+    AKUN_CACHE = AKUN;
+    tulisGudang(KUNCI_PROFIL, AKUN);
     pasangFotoAkun();
   });
 
@@ -5744,7 +5767,7 @@ const AKHIR = [
 
   /* --- cadangan akun --- */
   document.getElementById("btn-cadangan").addEventListener("click", function () {
-    var isi = { akun: DAFTAR_AKUN, rekap: bacaGudang(KUNCI_REKAP, {}), data: {} };
+    var isi = { profil: bacaGudang(KUNCI_PROFIL, {}), rekap: bacaGudang(KUNCI_REKAP, {}), data: {} };
     try {
       for (var i = 0; i < window.localStorage.length; i++) {
         var k = window.localStorage.key(i);
@@ -5769,10 +5792,8 @@ const AKHIR = [
       pembaca.onload = function () {
         try {
           var isi = JSON.parse(pembaca.result);
-          if (isi.akun) {
-            Object.keys(isi.akun).forEach(function (k) { DAFTAR_AKUN[k] = isi.akun[k]; });
-            tulisGudang(KUNCI_AKUN, DAFTAR_AKUN);
-          }
+          /* Format cadangan lama (akun) dan baru (profil) keduanya didukung */
+          if (isi.profil) tulisGudang(KUNCI_PROFIL, isi.profil);
           if (isi.rekap) tulisGudang(KUNCI_REKAP, isi.rekap);
           if (isi.data) Object.keys(isi.data).forEach(function (k) {
             try { window.localStorage.setItem(k, isi.data[k]); } catch (e) { }
