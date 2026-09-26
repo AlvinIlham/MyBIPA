@@ -39,9 +39,15 @@
    https://docs.google.com/spreadsheets/d/1wURIPGZ7jZwNJhAD8Jq_VmRMunvwIjl_TJWacII9bm8/edit */
 var ID_SPREADSHEET = '1wURIPGZ7jZwNJhAD8Jq_VmRMunvwIjl_TJWacII9bm8';
 
-var TINGKAT_MODUL = 'A1';     // tingkat yang ditangani modul ini
+var TINGKAT_MODUL = 'A1';     // tingkat bawaan bila modul tidak menyertakan tingkatan
 var KODE_TINGKAT  = 'P001';   // P001=A1, P002=A2, P003=B1, P004=B2, P005=C1, P006=C2
-var JUMLAH_UNIT   = 11;       // modul A1 bermuatan lokal Minangkabau memuat 11 unit
+var JUMLAH_UNIT   = 11;       // jumlah unit per modul
+
+function kodeTingkat(t) {
+  var s = String(t || '').trim().toUpperCase();
+  var peta = { 'A1': 'P001', 'A2': 'P002', 'B1': 'P003', 'B2': 'P004', 'C1': 'P005', 'C2': 'P006' };
+  return peta[s] || 'P001';
+}
 
 var SUREL_MYBIPA = 'mybipa3@gmail.com';
 var SUREL_ADMIN  = 'sukmaradi333@gmail.com';
@@ -154,12 +160,13 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     var aksi = data.aksi || 'simpan';
+    var tingkat = String(data.tingkat || (data.penuh && data.penuh.tingkat) || TINGKAT_MODUL).trim().toUpperCase();
     if (aksi === 'ambil') {
-      jawab = { ok: true, data: ambilPemelajar(data.surel) };
+      jawab = { ok: true, data: ambilPemelajar(data.surel, tingkat) };
     } else if (aksi === 'kelas') {
-      jawab = { ok: true, data: ambilKelas(data.dosen || '') };
+      jawab = { ok: true, data: ambilKelas(data.dosen || '', tingkat) };
     } else if (aksi === 'masuk') {
-      jawab = verifikasiMasuk(data.identitas || data.nama || data.surel || '', data.sandi || '');
+      jawab = verifikasiMasuk(data.identitas || data.nama || data.surel || '', data.sandi || '', tingkat);
     } else {
       simpan(data);
       jawab = { ok: true };
@@ -174,19 +181,22 @@ function doPost(e) {
 function doGet(e) {
   var par = (e && e.parameter) ? e.parameter : {};
   var jawab;
+  var tingkat = String(par.tingkat || TINGKAT_MODUL).trim().toUpperCase();
   try {
     if (par.aksi === 'kelas') {
-      jawab = { ok: true, data: ambilKelas(par.dosen || '') };
+      jawab = { ok: true, data: ambilKelas(par.dosen || '', tingkat) };
     } else if (par.aksi === 'masuk') {
-      jawab = verifikasiMasuk(par.identitas || par.nama || par.surel || '', par.sandi || '');
+      jawab = verifikasiMasuk(par.identitas || par.nama || par.surel || '', par.sandi || '', tingkat);
     } else if (par.aksi === 'simpan') {
       /* penyimpanan lewat doGet, dipakai bila pengiriman POST terhalang peramban */
-      simpan(JSON.parse(par.data || '{}'));
+      var dataObj = JSON.parse(par.data || '{}');
+      if (!dataObj.tingkat && par.tingkat) dataObj.tingkat = par.tingkat;
+      simpan(dataObj);
       jawab = { ok: true };
     } else if (par.surel) {
-      jawab = { ok: true, data: ambilPemelajar(par.surel) };
+      jawab = { ok: true, data: ambilPemelajar(par.surel, tingkat) };
     } else {
-      jawab = { ok: true, pesan: 'MyBIPA ' + TINGKAT_MODUL + ' siap menerima data.' };
+      jawab = { ok: true, pesan: 'MyBIPA ' + tingkat + ' siap menerima data.' };
     }
   } catch (galat) {
     jawab = { ok: false, pesan: String(galat) };
@@ -255,19 +265,32 @@ function simpanPemelajar(data) {
   var p = petaPemelajar();
   var lembar = p.lembar, kolom = p.kolom;
   var surel = rapi(data.surel);
+  var tingkatData = String(data.tingkat || (data.penuh && data.penuh.tingkat) || TINGKAT_MODUL).trim().toUpperCase();
   var akhirIsi = lembar.getLastRow();
   var baris = 0;
 
+  // Cari baris pemelajar yang cocok: SUREL SAMA dan TINGKATAN SAMA
   if (akhirIsi >= p.awalData && kolom['surel']) {
-    var daftar = lembar.getRange(p.awalData, kolom['surel'],
+    var daftarSurel = lembar.getRange(p.awalData, kolom['surel'],
                                  akhirIsi - p.awalData + 1, 1).getValues();
-    for (var i = 0; i < daftar.length; i++) {
-      if (rapi(daftar[i][0]) === surel) { baris = p.awalData + i; break; }
+    var colTingkat = kolom['tingkatan'];
+    var daftarTingkat = colTingkat
+      ? lembar.getRange(p.awalData, colTingkat, akhirIsi - p.awalData + 1, 1).getValues()
+      : [];
+
+    for (var i = 0; i < daftarSurel.length; i++) {
+      var s = rapi(daftarSurel[i][0]);
+      var t = daftarTingkat.length ? rapi(daftarTingkat[i][0]).toUpperCase() : '';
+      if (s === surel && (!colTingkat || !t || t === tingkatData)) {
+        baris = p.awalData + i;
+        break;
+      }
     }
   }
 
   var baru = false;
   if (!baris) {
+    // Jika belum ada baris untuk tingkatan ini, buat baris baru di bawahnya
     var kNama = kolom['nama pemelajar'] || 2;
     var nilaiNama = akhirIsi >= p.awalData
       ? lembar.getRange(p.awalData, kNama, akhirIsi - p.awalData + 1, 1).getValues()
@@ -300,7 +323,7 @@ function simpanPemelajar(data) {
   tulis('no', baris - p.awalData + 1);
   tulis('nama pemelajar', data.nama || '');
   tulis('asal/negara', data.instansi || '');
-  tulis('tingkatan', TINGKAT_MODUL);
+  tulis('tingkatan', tingkatData);
   tulis('nilai akhir', Number(data.rata) || 0);
   tulis('surel', data.surel || '');
   tulis('whatsapp', data.wa || '');
@@ -311,9 +334,9 @@ function simpanPemelajar(data) {
   tulis('data lengkap', JSON.stringify(data.penuh || {}).slice(0, 45000));
   if (data.sandi) tulis('kata sandi', String(data.sandi));
 
-  if (baru && KIRIM_SUREL) kirimSurelBaru(data);
+  if (baru && KIRIM_SUREL) kirimSurelBaru(data, tingkatData);
   if (KIRIM_SUREL && tuntas >= JUMLAH_UNIT && rapi(data.catatan) !== 'masuk') {
-    kirimSurelSelesai(data, tuntas);
+    kirimSurelSelesai(data, tuntas, tingkatData);
   }
 }
 
@@ -331,6 +354,9 @@ function simpanPengajar(data) {
   var judul = barisJudul(lembar, 'id guru');
   if (!judul) return;
 
+  var tingkatData = String(data.tingkat || TINGKAT_MODUL).trim().toUpperCase();
+  var kodeData = data.kodeTingkat || kodeTingkat(tingkatData);
+
   var awal = judul + 1;
   var akhir = lembar.getLastRow();
   var lebar = Math.max(lembar.getLastColumn(), 8);
@@ -341,9 +367,9 @@ function simpanPengajar(data) {
   for (var i = 0; i < isi.length; i++) {
     var b = isi[i];
     if (String(b[0]).trim() !== '') jumlahGuru++;
-    if (rapi(b[4]) === surel && rapi(b[2]) === rapi(TINGKAT_MODUL)) { baris = awal + i; break; }
+    if (rapi(b[4]) === surel && rapi(b[2]) === rapi(tingkatData)) { baris = awal + i; break; }
     if (!kosong && String(b[0]).trim() !== '' && String(b[3]).trim() === '' &&
-        rapi(b[2]) === rapi(TINGKAT_MODUL)) kosong = awal + i;
+        rapi(b[2]) === rapi(tingkatData)) kosong = awal + i;
   }
   if (!baris) baris = kosong || Math.max(akhir + 1, awal);
 
@@ -354,15 +380,16 @@ function simpanPengajar(data) {
   var sandiPengajar = data.sandi || sandiLama || '(tersimpan pada peramban pengajar)';
 
   lembar.getRange(baris, 1, 1, 8).setValues([[
-    idGuru, KODE_TINGKAT, TINGKAT_MODUL, data.nama || '',
+    idGuru, kodeData, tingkatData, data.nama || '',
     data.surel || '', sandiPengajar, 'Pengajar', 'Aktif'
   ]]);
 }
 
 function catat(data, peran) {
+  var tkt = String(data.tingkat || (data.penuh && data.penuh.tingkat) || TINGKAT_MODUL).trim().toUpperCase();
   lembarAktivitas().appendRow([
     new Date(), data.nama || '', data.surel || '', peran || '',
-    TINGKAT_MODUL, data.dosen || '', data.catatan || 'kemajuan',
+    tkt, data.dosen || '', data.catatan || 'kemajuan',
     data.tuntas || 0, data.rata || 0
   ]);
 }
@@ -395,27 +422,52 @@ function bacaBaris(lembar, kolom, baris, denganData) {
   return hasil;
 }
 
-function ambilPemelajar(surel) {
+function ambilPemelajar(surel, tingkat) {
   var p = petaPemelajar();
   var lembar = p.lembar, kolom = p.kolom;
   var akhir = lembar.getLastRow();
   if (akhir < p.awalData || !kolom['surel']) return null;
-  var daftar = lembar.getRange(p.awalData, kolom['surel'], akhir - p.awalData + 1, 1).getValues();
-  var cari = rapi(surel), baris = 0;
-  for (var i = 0; i < daftar.length; i++) {
-    if (rapi(daftar[i][0]) === cari) { baris = p.awalData + i; break; }
+  var daftarSurel = lembar.getRange(p.awalData, kolom['surel'], akhir - p.awalData + 1, 1).getValues();
+  var colTingkat = kolom['tingkatan'];
+  var daftarTingkat = colTingkat
+    ? lembar.getRange(p.awalData, colTingkat, akhir - p.awalData + 1, 1).getValues()
+    : [];
+
+  var cari = rapi(surel), tkt = rapi(tingkat).toUpperCase(), baris = 0, barisAlternatif = 0;
+  for (var i = 0; i < daftarSurel.length; i++) {
+    var s = rapi(daftarSurel[i][0]);
+    var t = daftarTingkat.length ? rapi(daftarTingkat[i][0]).toUpperCase() : '';
+    if (s === cari) {
+      if (!tkt || t === tkt) {
+        baris = p.awalData + i;
+        break;
+      }
+      if (!barisAlternatif) barisAlternatif = p.awalData + i;
+    }
+  }
+
+  if (!baris && barisAlternatif) {
+    var profil = bacaBaris(lembar, kolom, barisAlternatif, false);
+    profil.tingkat = tingkat ? String(tingkat).toUpperCase() : TINGKAT_MODUL;
+    profil.unit = [];
+    profil.tuntas = 0;
+    profil.rata = 0;
+    profil.penuh = {};
+    return profil;
   }
   if (!baris) return null;
   return bacaBaris(lembar, kolom, baris, true);
 }
 
 /** Daftar pemelajar milik seorang pengajar. Kirim '*' untuk seluruh pemelajar. */
-function ambilKelas(dosen) {
+function ambilKelas(dosen, tingkat) {
   var p = petaPemelajar();
   var lembar = p.lembar, kolom = p.kolom;
   var akhir = lembar.getLastRow();
   if (akhir < p.awalData) return [];
   var cari = rapi(dosen);
+  var tkt = rapi(tingkat).toUpperCase();
+  var colTingkat = kolom['tingkatan'];
   var hasil = [];
   for (var baris = p.awalData; baris <= akhir; baris++) {
     var nama = kolom['nama pemelajar']
@@ -424,14 +476,21 @@ function ambilKelas(dosen) {
     var milik = kolom['pengajar']
       ? rapi(lembar.getRange(baris, kolom['pengajar']).getValue()) : '';
     if (cari !== '*' && (!milik || milik.indexOf(cari) < 0)) continue;
+
+    if (tkt && colTingkat) {
+      var rowTkt = rapi(lembar.getRange(baris, colTingkat).getValue()).toUpperCase();
+      if (rowTkt && rowTkt !== tkt) continue;
+    }
+
     hasil.push(bacaBaris(lembar, kolom, baris, false));
   }
   return hasil;
 }
 
 /** Verifikasi login pemelajar atau pengajar secara online dari perangkat mana pun. */
-function verifikasiMasuk(identitas, sandiHash) {
+function verifikasiMasuk(identitas, sandiHash, tingkat) {
   var id = rapi(identitas);
+  var tkt = rapi(tingkat).toUpperCase();
   if (!id) return { ok: false, pesan: 'Nama atau surel wajib diisi.' };
   if (!sandiHash) return { ok: false, pesan: 'Kata sandi wajib diisi.' };
 
@@ -440,44 +499,66 @@ function verifikasiMasuk(identitas, sandiHash) {
   var lembar = p.lembar, kolom = p.kolom;
   var akhir = lembar.getLastRow();
   var baris = 0;
+  var barisAlternatif = 0;
 
   if (akhir >= p.awalData) {
     var colNama = kolom['nama pemelajar'] || 2;
     var colSurel = kolom['surel'];
+    var colTingkat = kolom['tingkatan'];
     var dataNama = lembar.getRange(p.awalData, colNama, akhir - p.awalData + 1, 1).getValues();
     var dataSurel = colSurel
       ? lembar.getRange(p.awalData, colSurel, akhir - p.awalData + 1, 1).getValues()
+      : [];
+    var dataTingkat = colTingkat
+      ? lembar.getRange(p.awalData, colTingkat, akhir - p.awalData + 1, 1).getValues()
       : [];
 
     for (var i = 0; i < dataNama.length; i++) {
       var n = rapi(dataNama[i][0]);
       var s = dataSurel.length ? rapi(dataSurel[i][0]) : '';
+      var t = dataTingkat.length ? rapi(dataTingkat[i][0]).toUpperCase() : '';
       if ((n && n === id) || (s && s === id)) {
-        baris = p.awalData + i;
-        break;
+        if (!tkt || t === tkt) {
+          baris = p.awalData + i;
+          break;
+        }
+        if (!barisAlternatif) barisAlternatif = p.awalData + i;
       }
     }
   }
 
-  if (baris) {
+  var barisVerifikasi = baris || barisAlternatif;
+
+  if (barisVerifikasi) {
     var colSandi = kolom['kata sandi'];
-    var sandiDiSheet = colSandi ? String(lembar.getRange(baris, colSandi).getValue()).trim() : '';
+    var sandiDiSheet = colSandi ? String(lembar.getRange(barisVerifikasi, colSandi).getValue()).trim() : '';
 
     if (!sandiDiSheet) {
       // Akun lama yang belum tercatat sandinya di spreadsheet:
       // Daftarkan sandi yang dimasukkan sekarang agar multi-device langsung aktif
       if (colSandi) {
-        lembar.getRange(baris, colSandi).setValue(sandiHash);
+        lembar.getRange(barisVerifikasi, colSandi).setValue(sandiHash);
         SpreadsheetApp.flush();
       }
     } else if (sandiDiSheet !== sandiHash) {
       return { ok: false, pesan: 'Kata sandi belum tepat.' };
     }
 
-    var dataPemelajar = bacaBaris(lembar, kolom, baris, true);
+    var dataPemelajar;
+    if (baris) {
+      dataPemelajar = bacaBaris(lembar, kolom, baris, true);
+    } else {
+      // Akun valid tetapi belum punya nilai di tingkatan yang diminta
+      dataPemelajar = bacaBaris(lembar, kolom, barisAlternatif, false);
+      dataPemelajar.tingkat = tingkat ? String(tingkat).toUpperCase() : TINGKAT_MODUL;
+      dataPemelajar.unit = [];
+      dataPemelajar.tuntas = 0;
+      dataPemelajar.rata = 0;
+      dataPemelajar.penuh = {};
+    }
     dataPemelajar.sandi = sandiHash;
     dataPemelajar.peran = 'pemelajar';
-    catat({ nama: dataPemelajar.nama, surel: dataPemelajar.surel, dosen: dataPemelajar.dosen, catatan: 'masuk akun' }, 'pemelajar');
+    catat({ nama: dataPemelajar.nama, surel: dataPemelajar.surel, dosen: dataPemelajar.dosen, tingkat: dataPemelajar.tingkat, catatan: 'masuk akun' }, 'pemelajar');
     return { ok: true, peran: 'pemelajar', data: dataPemelajar };
   }
 
@@ -511,7 +592,7 @@ function verifikasiMasuk(identitas, sandiHash) {
               sandi: sandiHash,
               peran: 'pengajar'
             };
-            catat({ nama: dataPengajar.nama, surel: dataPengajar.surel, catatan: 'masuk akun' }, 'pengajar');
+            catat({ nama: dataPengajar.nama, surel: dataPengajar.surel, tingkat: isiG[g][2] || tkt || 'A1', catatan: 'masuk akun' }, 'pengajar');
             return {
               ok: true,
               peran: 'pengajar',
@@ -528,9 +609,10 @@ function verifikasiMasuk(identitas, sandiHash) {
 
 /* ============================ SUREL ================================= */
 
-function kirimSurelBaru(data) {
+function kirimSurelBaru(data, tingkat) {
+  var tkt = tingkat || data.tingkat || TINGKAT_MODUL;
   var pesan =
-    'Pemelajar baru mendaftar pada Modul Ajar Digital MyBIPA Tingkat ' + TINGKAT_MODUL + '.\n\n' +
+    'Pemelajar baru mendaftar pada Modul Ajar Digital MyBIPA Tingkat ' + tkt + '.\n\n' +
     'Nama      : ' + (data.nama || '-') + '\n' +
     'Surel     : ' + (data.surel || '-') + '\n' +
     'WhatsApp  : ' + (data.wa || '-') + '\n' +
@@ -538,12 +620,13 @@ function kirimSurelBaru(data) {
     'Pengajar  : ' + (data.dosen || 'tidak diisi') + '\n' +
     'Waktu     : ' + new Date().toLocaleString('id-ID') + '\n';
   MailApp.sendEmail(SUREL_MYBIPA + ',' + SUREL_ADMIN,
-    'MyBIPA ' + TINGKAT_MODUL + ' — pendaftar baru: ' + (data.nama || ''), pesan);
+    'MyBIPA ' + tkt + ' — pendaftar baru: ' + (data.nama || ''), pesan);
 }
 
-function kirimSurelSelesai(data, tuntas) {
+function kirimSurelSelesai(data, tuntas, tingkat) {
+  var tkt = tingkat || data.tingkat || TINGKAT_MODUL;
   var pesan =
-    'Seorang pemelajar telah menuntaskan seluruh ' + JUMLAH_UNIT + ' unit.\n\n' +
+    'Seorang pemelajar telah menuntaskan seluruh ' + JUMLAH_UNIT + ' unit pada Tingkat ' + tkt + '.\n\n' +
     'Nama        : ' + (data.nama || '-') + '\n' +
     'Instansi    : ' + (data.instansi || '-') + '\n' +
     'Pengajar    : ' + (data.dosen || 'tidak diisi') + '\n' +
@@ -551,7 +634,7 @@ function kirimSurelSelesai(data, tuntas) {
     'Nilai akhir : ' + (data.rata || 0) + ' (' + predikat(data.rata) + ')\n' +
     'Nilai unit  : ' + (data.unit || []).join(', ') + '\n';
   MailApp.sendEmail(SUREL_MYBIPA + ',' + SUREL_ADMIN,
-    'MyBIPA ' + TINGKAT_MODUL + ' — ' + (data.nama || '') + ' menyelesaikan seluruh unit', pesan);
+    'MyBIPA ' + tkt + ' — ' + (data.nama || '') + ' menyelesaikan seluruh unit', pesan);
 }
 
 /* ============================ PENGUJIAN ============================= */
