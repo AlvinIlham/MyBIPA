@@ -50,6 +50,7 @@ var KIRIM_SUREL  = true;      // ubah ke false bila pemberitahuan surel tidak di
 var LEMBAR_PEMELAJAR = 'Pemelajar';
 var LEMBAR_PENGAJAR  = 'Pengajar';
 var LEMBAR_AKTIVITAS = 'Aktivitas';
+var LEMBAR_AKUN      = 'Akun';
 
 var KOLOM_TAMBAHAN = ['Surel', 'WhatsApp', 'Pengajar', 'Predikat',
                       'Unit Tuntas', 'Diperbarui', 'Data Lengkap', 'Kata Sandi'];
@@ -208,7 +209,46 @@ function simpan(data) {
   var peran = rapi(data.peran) || 'pemelajar';
   if (peran === 'pengajar') simpanPengajar(data);
   else if (peran !== 'admin') simpanPemelajar(data);
+  simpanAkun(data);
   catat(data, peran);
+}
+
+function simpanAkun(data) {
+  var b = berkas();
+  var lembar = b.getSheetByName(LEMBAR_AKUN);
+  if (!lembar) return;
+
+  var surel = rapi(data.surel);
+  if (!surel) return;
+
+  var akhir = lembar.getLastRow();
+  var baris = 0;
+  if (akhir >= 2) {
+    var daftarSurel = lembar.getRange(2, 1, akhir - 1, 1).getValues();
+    for (var i = 0; i < daftarSurel.length; i++) {
+      if (rapi(daftarSurel[i][0]) === surel) {
+        baris = 2 + i;
+        break;
+      }
+    }
+  }
+  if (!baris) baris = Math.max(akhir + 1, 2);
+
+  var dibuatLama = (baris <= akhir && lembar.getRange(baris, 8).getValue()) || '';
+  var sandiLama = (baris <= akhir && lembar.getRange(baris, 3).getValue()) || '';
+  var sandiSimpan = data.sandi || sandiLama || '';
+
+  lembar.getRange(baris, 1, 1, 9).setValues([[
+    data.surel || '',
+    data.nama || '',
+    sandiSimpan,
+    data.peran || 'pemelajar',
+    data.wa || '-',
+    data.instansi || '',
+    data.dosen || '',
+    dibuatLama || new Date(),
+    new Date()
+  ]]);
 }
 
 function simpanPemelajar(data) {
