@@ -3315,20 +3315,28 @@ const AKHIR = [
     });
   }
 
-  /* Simpan suntingan ke Supabase - hanya dipanggil oleh admin */
+  /* Simpan suntingan ke Supabase SECARA LANGSUNG tanpa delay (untuk foto dan media) */
+  function supabaseSimpanSuntinganSegera(selesai) {
+    if (!SUPABASE_URL || !ADMIN) { if (selesai) selesai(false, "Supabase atau admin tidak aktif"); return; }
+    clearTimeout(_timerSunting);
+    var muatan = {
+      id: "a1-modul",
+      data: SUNTINGAN,
+      diperbarui: new Date().toISOString(),
+      diperbarui_oleh: AKUN ? (AKUN.surel || AKUN.nama || "admin") : "admin"
+    };
+    supabaseReq("suntingan", "POST", muatan, function (ok, res, err) {
+      if (!ok) { console.warn("[MyBIPA] Gagal simpan suntingan ke Supabase:", err); }
+      if (selesai) selesai(ok, err);
+    });
+  }
+
+  /* Simpan suntingan ke Supabase dengan debounce 1500ms (untuk ketikan teks) */
   function supabaseSimpanSuntingan() {
     if (!SUPABASE_URL || !ADMIN) return;
     clearTimeout(_timerSunting);
     _timerSunting = setTimeout(function () {
-      var muatan = {
-        id: "a1-modul",
-        data: SUNTINGAN,
-        diperbarui: new Date().toISOString(),
-        diperbarui_oleh: AKUN ? (AKUN.surel || AKUN.nama || "admin") : "admin"
-      };
-      supabaseReq("suntingan", "POST", muatan, function (ok, res, err) {
-        if (!ok) { console.warn("[MyBIPA] Gagal simpan suntingan ke Supabase:", err); }
-      });
+      supabaseSimpanSuntinganSegera();
     }, 1500);
   }
 
@@ -3418,18 +3426,22 @@ const AKHIR = [
     }
   }
 
-  function simpanFotoModul() {
+  function simpanFotoModul(selesai) {
     SUNTINGAN.__FOTO__ = FOTO_MODUL;
     simpanSuntingan();
-    supabaseSimpanSuntingan();
     tulisGudang(KUNCI_FOTO_MODUL, FOTO_MODUL);
+    supabaseSimpanSuntinganSegera(function (ok, err) {
+      if (selesai) selesai(ok, err);
+    });
   }
 
-  function simpanMediaKustom() {
+  function simpanMediaKustom(selesai) {
     SUNTINGAN.__MEDIA__ = MEDIA_KUSTOM;
     simpanSuntingan();
-    supabaseSimpanSuntingan();
     tulisGudang(KUNCI_MEDIA_KUSTOM, MEDIA_KUSTOM);
+    supabaseSimpanSuntinganSegera(function (ok, err) {
+      if (selesai) selesai(ok, err);
+    });
   }
   function kecilkanGambar(berkas, sisiMaks, lanjut) {
     var pembaca = new FileReader();
@@ -3842,13 +3854,30 @@ const AKHIR = [
         }
 
         /* File <= 10MB: convert to DataURL Base64 dan simpan ke Supabase */
+        var teksAwal = btnUnggah.textContent;
+        btnUnggah.disabled = true;
+        btnUnggah.textContent = "⏳ Menyimpan ke Supabase…";
+        nama.textContent = "Mengunggah " + berkas.name + " (" + (berkas.size / (1024 * 1024)).toFixed(1) + " MB) ke Supabase…";
+        nama.style.color = "#D9A441";
+
         var pembaca = new FileReader();
         pembaca.onload = function () {
           var dataUrl = pembaca.result;
           MEDIA_KUSTOM[b.kode] = dataUrl;
-          simpanMediaKustom();
           pasangSumberMedia(dataUrl);
-          window.alert((jenisVideo ? "Video MP4" : "Audio MP3") + " berhasil diunggah dan disimpan ke Supabase!");
+          simpanMediaKustom(function (ok, err) {
+            btnUnggah.disabled = false;
+            btnUnggah.textContent = teksAwal;
+            if (ok) {
+              nama.textContent = "Berkas tersimpan di Supabase";
+              nama.style.color = "#3E7C59";
+              window.alert((jenisVideo ? "Video MP4" : "Audio MP3") + " BERHASIL disimpan ke basis data Supabase!\n\nSekarang Anda bebas memuat ulang (refresh) halaman tanpa khawatir audio hilang.");
+            } else {
+              nama.textContent = "Gagal simpan ke Supabase: " + (err || "cek koneksi");
+              nama.style.color = "#E8413B";
+              window.alert("PERINGATAN: Gagal menyimpan ke Supabase (" + (err || "jaringan/kuota") + "). Pastikan koneksi internet aktif.");
+            }
+          });
         };
         pembaca.readAsDataURL(berkas);
       });
@@ -3872,9 +3901,14 @@ const AKHIR = [
         var teks = masukkan.trim();
         if (teks) {
           MEDIA_KUSTOM[b.kode] = teks;
-          simpanMediaKustom();
           pasangSumberMedia(teks);
-          window.alert((jenisVideo ? "Tautan video" : "Tautan audio") + " berhasil disimpan ke Supabase!");
+          simpanMediaKustom(function (ok, err) {
+            if (ok) {
+              window.alert((jenisVideo ? "Tautan video" : "Tautan audio") + " berhasil disimpan ke Supabase!");
+            } else {
+              window.alert("Gagal menyimpan ke Supabase: " + (err || "error"));
+            }
+          });
         }
       });
 
@@ -3885,10 +3919,11 @@ const AKHIR = [
       btnReset.addEventListener("click", function () {
         if (window.confirm("Hapus media kustom dan kembalikan ke berkas bawaan?")) {
           delete MEDIA_KUSTOM[b.kode];
-          simpanMediaKustom();
           var asal = MEDIA[b.kode] || ("media/" + b.kode + (jenisVideo ? ".mp4" : ".mp3"));
           pasangSumberMedia(asal);
-          window.alert("Media dikembalikan ke berkas bawaan modul.");
+          simpanMediaKustom(function () {
+            window.alert("Media dikembalikan ke berkas bawaan modul.");
+          });
         }
       });
 
@@ -4811,13 +4846,23 @@ const AKHIR = [
             "Video langsung aktif di perangkat ini. Untuk video berukuran besar, disarankan juga menaruh berkas di folder 'media/video/mars.mp4'.");
           return;
         }
+        var teksAwalMars = tbUnggah.textContent;
+        tbUnggah.disabled = true;
+        tbUnggah.textContent = "⏳ Menyimpan ke Supabase…";
         var pembaca = new FileReader();
         pembaca.onload = function () {
           var dataUrl = pembaca.result;
           MEDIA_KUSTOM["mars"] = dataUrl;
-          simpanMediaKustom();
           if (videoMars) { videoMars.src = dataUrl; marsSiap = false; }
-          window.alert("Video Mars MP4 berhasil diunggah dan disimpan ke Supabase!");
+          simpanMediaKustom(function (ok, err) {
+            tbUnggah.disabled = false;
+            tbUnggah.textContent = teksAwalMars;
+            if (ok) {
+              window.alert("Video Mars MP4 berhasil disimpan ke Supabase!");
+            } else {
+              window.alert("Gagal menyimpan video Mars: " + (err || "error"));
+            }
+          });
         };
         pembaca.readAsDataURL(berkas);
       });
