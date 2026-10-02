@@ -3913,8 +3913,7 @@ const AKHIR = [
         sudahCadangan = true;
         pemutar.src = AUDIO_BAWAAN[b.kode];
         pemutar.load();
-        var coba = pemutar.play();
-        if (coba && coba.catch) coba.catch(function () { });
+        /* tidak memutar otomatis (autoplay dimatikan) */
         nama.textContent = "rekaman latihan sementara · suara sintetis bawaan modul";
         nama.style.color = "#D9A441";
         return;
