@@ -3386,6 +3386,21 @@ const AKHIR = [
     }
   }
 
+  
+  function periksaVideoEmbed(url) {
+    if (!url || typeof url !== "string") return null;
+    var u = url.trim();
+    var ytMatch = u.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/))([\w-]{11})/i);
+    if (ytMatch && ytMatch[1]) {
+      return { tipe: "youtube", src: "https://www.youtube-nocookie.com/embed/" + ytMatch[1] + "?rel=0" };
+    }
+    var gdMatch = u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+    if (gdMatch && gdMatch[1]) {
+      return { tipe: "drive", src: "https://drive.google.com/file/d/" + gdMatch[1] + "/preview" };
+    }
+    return null;
+  }
+
   var DAFTAR_PEMASANG_MEDIA = [];
   function daftarkanPemasangMedia(kode, fn) {
     DAFTAR_PEMASANG_MEDIA.push({ kode: kode, fn: fn });
@@ -3737,77 +3752,163 @@ const AKHIR = [
       '</span><span class="durasi">' + (b.durasi || "") + "</span></div>" +
       "<h4>" + b.judul + "</h4>" +
       (b.ket ? "<p>" + b.ket + "</p>" : "");
+
+    var wadahPemutar = E("div", "wadah-pemutar");
     var pemutar = document.createElement(jenisVideo ? "video" : "audio");
     pemutar.controls = true; pemutar.preload = "none";
     if (jenisVideo) pemutar.setAttribute("playsinline", "");
-    pemutar.src = alamat;
-    kotak.appendChild(pemutar);
+    wadahPemutar.appendChild(pemutar);
+    kotak.appendChild(wadahPemutar);
 
     var kaki = E("div", "kaki");
-    var tombol = E("button", "tbl-kecil", jenisVideo ? "⚙ Ganti berkas/link video" : "⚙ Ganti berkas/link audio");
-    tombol.type = "button";
     var nama = E("span", "berkas", (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) ? "Tersambung ke media kustom (Supabase)" : alamat);
 
-    function pasangMediaKustom(url) {
-      pemutar.src = url;
-      pemutar.load();
-      nama.textContent = url.startsWith("data:") ? "Media tersimpan di basis data Supabase" : url;
-      nama.style.color = "#3E7C59";
+    function pasangSumberMedia(url) {
+      var embed = jenisVideo ? periksaVideoEmbed(url) : null;
+      if (embed) {
+        pemutar.style.display = "none";
+        pemutar.removeAttribute("src");
+        try { pemutar.pause(); } catch (e) { }
+        var ifr = wadahPemutar.querySelector("iframe.video-embed");
+        if (!ifr) {
+          ifr = document.createElement("iframe");
+          ifr.className = "video-embed";
+          ifr.setAttribute("allowfullscreen", "");
+          ifr.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+          wadahPemutar.appendChild(ifr);
+        }
+        ifr.src = embed.src;
+        ifr.style.display = "block";
+        nama.textContent = "Tersambung ke " + (embed.tipe === "youtube" ? "YouTube" : "Google Drive") + " (Supabase)";
+        nama.style.color = "#3E7C59";
+      } else {
+        var ifrAda = wadahPemutar.querySelector("iframe.video-embed");
+        if (ifrAda) {
+          ifrAda.src = "";
+          ifrAda.style.display = "none";
+        }
+        pemutar.style.display = "block";
+        pemutar.src = url;
+        pemutar.load();
+        if (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) {
+          nama.textContent = url.startsWith("data:") ? "Berkas tersimpan di Supabase" : url;
+          nama.style.color = "#3E7C59";
+        } else {
+          nama.textContent = url;
+          nama.style.color = "";
+        }
+      }
+      if (btnReset) {
+        btnReset.style.display = (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) ? "inline-block" : "none";
+      }
     }
-    daftarkanPemasangMedia(b.kode, pasangMediaKustom);
 
-    tombol.addEventListener("click", function () {
-      var pesan = "PENGATURAN " + (jenisVideo ? "VIDEO" : "AUDIO") + " MODUL (" + b.kode.toUpperCase() + "):\n\n" +
-        "1. Tempelkan URL tautan langsung (link MP3/MP4, YouTube, Google Drive, dsb).\n" +
-        "2. Atau ketik 'unggah' untuk memilih berkas dari komputer/ponsel ini.\n\n" +
-        "Tautan saat ini: " + (MEDIA_KUSTOM[b.kode] || alamat);
-      var masukkan = window.prompt(pesan, (MEDIA_KUSTOM[b.kode] || ""));
-      if (masukkan === null) return;
-      var teks = masukkan.trim();
-      if (!teks) {
+    /* Tombol-tombol Admin: Tombol Unggah File & Tombol Tautan URL */
+    var btnUnggah = null;
+    var btnLink = null;
+    var btnReset = null;
+
+    if (ADMIN) {
+      /* 1. Tombol Unggah Berkas Langsung */
+      btnUnggah = E("button", "tbl-kecil", jenisVideo ? "📁 Unggah Video (MP4)" : "📁 Unggah Audio (MP3)");
+      btnUnggah.type = "button";
+      btnUnggah.style.background = "#3E7C59";
+      btnUnggah.style.color = "#fff";
+      btnUnggah.style.fontWeight = "600";
+      btnUnggah.title = "Pilih berkas dari komputer atau ponsel Anda";
+
+      var inpBerkas = document.createElement("input");
+      inpBerkas.type = "file";
+      inpBerkas.accept = jenisVideo ? "video/mp4,video/*" : "audio/mp3,audio/*";
+      inpBerkas.style.display = "none";
+
+      inpBerkas.addEventListener("change", function () {
+        var berkas = inpBerkas.files && inpBerkas.files[0];
+        if (!berkas) return;
+        nama.textContent = "Memproses " + berkas.name + " (" + (berkas.size / (1024 * 1024)).toFixed(1) + " MB)…";
+        nama.style.color = "#D9A441";
+
+        if (berkas.size > 10 * 1024 * 1024) {
+          /* File besar > 10MB: preview via ObjectURL dan berikan petunjuk praktis */
+          var objUrl = URL.createObjectURL(berkas);
+          pasangSumberMedia(objUrl);
+          window.alert("Ukuran video: " + (berkas.size / (1024 * 1024)).toFixed(1) + " MB.\n\n" +
+            "Video sudah langsung aktif dan dapat diputar di perangkat ini.\n\n" +
+            "TIPS PENGELOLAAN VIDEO BESAR:\n" +
+            "1. Agar modul tetap ringan dan bisa diputar secara offline oleh semua pengguna, letakkan berkas video ini di folder:\n" +
+            "   media/video/" + (b.kode) + ".mp4\n\n" +
+            "2. Atau unggah video ke penyimpanan awan (Cloud/Direct Link MP4) lalu gunakan tombol '🔗 Tautan Video'.");
+          return;
+        }
+
+        /* File <= 10MB: convert to DataURL Base64 dan simpan ke Supabase */
+        var pembaca = new FileReader();
+        pembaca.onload = function () {
+          var dataUrl = pembaca.result;
+          MEDIA_KUSTOM[b.kode] = dataUrl;
+          simpanMediaKustom();
+          pasangSumberMedia(dataUrl);
+          window.alert((jenisVideo ? "Video MP4" : "Audio MP3") + " berhasil diunggah dan disimpan ke Supabase!");
+        };
+        pembaca.readAsDataURL(berkas);
+      });
+
+      btnUnggah.addEventListener("click", function () {
+        inpBerkas.click();
+      });
+
+      /* 2. Tombol Tautan / Link URL */
+      btnLink = E("button", "tbl-kecil", "🔗 Tautan / URL");
+      btnLink.type = "button";
+      btnLink.title = "Gunakan link tautan berkas daring";
+      btnLink.addEventListener("click", function () {
+        var skrg = MEDIA_KUSTOM[b.kode] || alamat;
+        var pesan = "MASUKKAN LINK " + (jenisVideo ? "VIDEO" : "AUDIO") + " (" + b.kode.toUpperCase() + "):\n\n" +
+          "• Masukkan tautan berkas langsung (contoh: https://.../video.mp4)\n" +
+          "• Atau tautan Google Drive / Cloudinary\n\n" +
+          "Tautan saat ini: " + skrg;
+        var masukkan = window.prompt(pesan, (MEDIA_KUSTOM[b.kode] || ""));
+        if (masukkan === null) return;
+        var teks = masukkan.trim();
+        if (teks) {
+          MEDIA_KUSTOM[b.kode] = teks;
+          simpanMediaKustom();
+          pasangSumberMedia(teks);
+          window.alert((jenisVideo ? "Tautan video" : "Tautan audio") + " berhasil disimpan ke Supabase!");
+        }
+      });
+
+      /* 3. Tombol Reset / Kembalikan ke berkas bawaan */
+      btnReset = E("button", "tbl-kecil", "↺ Kembalikan Asli");
+      btnReset.type = "button";
+      btnReset.title = "Hapus media kustom dan kembali ke berkas awal";
+      btnReset.addEventListener("click", function () {
         if (window.confirm("Hapus media kustom dan kembalikan ke berkas bawaan?")) {
           delete MEDIA_KUSTOM[b.kode];
           simpanMediaKustom();
-          pemutar.src = MEDIA[b.kode] || ("media/" + b.kode + (jenisVideo ? ".mp4" : ".mp3"));
-          pemutar.load();
-          nama.textContent = pemutar.src;
-          nama.style.color = "";
+          var asal = MEDIA[b.kode] || ("media/" + b.kode + (jenisVideo ? ".mp4" : ".mp3"));
+          pasangSumberMedia(asal);
+          window.alert("Media dikembalikan ke berkas bawaan modul.");
         }
-        return;
-      }
-      if (teks.toLowerCase() === "unggah") {
-        var inp = document.createElement("input");
-        inp.type = "file";
-        inp.accept = jenisVideo ? "video/*" : "audio/*";
-        inp.addEventListener("change", function () {
-          var berkas = inp.files && inp.files[0];
-          if (!berkas) return;
-          if (berkas.size > 8 * 1024 * 1024) {
-            window.alert("Ukuran berkas melebihi 8MB. Disarankan memasukkan URL tautan daring (misal Google Drive/Cloudinary/YouTube) agar pemuatan cepat.");
-            return;
-          }
-          var pembaca = new FileReader();
-          pembaca.onload = function () {
-            var dataUrl = pembaca.result;
-            MEDIA_KUSTOM[b.kode] = dataUrl;
-            simpanMediaKustom();
-            pasangMediaKustom(dataUrl);
-            window.alert((jenisVideo ? "Video" : "Audio") + " berhasil disimpan ke Supabase!");
-          };
-          pembaca.readAsDataURL(berkas);
-        });
-        inp.click();
-      } else {
-        MEDIA_KUSTOM[b.kode] = teks;
-        simpanMediaKustom();
-        pasangMediaKustom(teks);
-        window.alert((jenisVideo ? "Video" : "Audio") + " berhasil disimpan ke Supabase!");
-      }
-    });
+      });
+
+      kaki.appendChild(btnUnggah);
+      kaki.appendChild(inpBerkas);
+      kaki.appendChild(btnLink);
+      kaki.appendChild(btnReset);
+    }
+
+    pasangSumberMedia(alamat);
+
+    function pasangMediaKustom(url) {
+      pasangSumberMedia(url);
+    }
+    daftarkanPemasangMedia(b.kode, pasangMediaKustom);
 
     var sudahCadangan = false;
     pemutar.addEventListener("error", function () {
-      if (pemutar.src.indexOf("blob:") === 0 || pemutar.src.indexOf("data:") === 0) return;
+      if (pemutar.style.display === "none") return;
+      if (!pemutar.src || pemutar.src.indexOf("blob:") === 0 || pemutar.src.indexOf("data:") === 0) return;
       if (!sudahCadangan && AUDIO_BAWAAN[b.kode]) {
         sudahCadangan = true;
         pemutar.src = AUDIO_BAWAAN[b.kode];
@@ -3818,20 +3919,25 @@ const AKHIR = [
         nama.style.color = "#D9A441";
         return;
       }
-      nama.textContent = alamat + " · berkas belum tersedia, gunakan tombol di samping";
+      nama.textContent = alamat + " · berkas belum tersedia, gunakan tombol unggah di samping";
     });
+
     if (AUDIO_BAWAAN[b.kode]) {
       kotak.classList.add("ada-cadangan");
       var tandaC = E("span", "tanda-cadangan", "● rekaman sementara tersedia");
       kotak.querySelector(".kop").appendChild(tandaC);
     }
-    if (ADMIN) kaki.appendChild(tombol);
+
     kaki.appendChild(nama);
     kotak.appendChild(kaki);
     kotak.appendChild(E("div", "cetak-saja",
       (jenisVideo ? "VIDEO" : "AUDIO") + " — " + alamat + (b.durasi ? " (" + b.durasi + ")" : "") + ". Putar dari perangkat pengajar."));
     return kotak;
   }
+
+
+
+
 
   /* ---------- latihan: pilihan ganda ---------- */
   function buatPantau() {
@@ -4676,38 +4782,96 @@ const AKHIR = [
     var isiK = E("div", "mars-isi");
     isiK.appendChild(E("h4", null, b.judul || "Mars Sumatera Barat"));
     if (b.ket) isiK.appendChild(E("p", null, b.ket));
-    var tb = E("button", "tuas-mars", "\u266a Putar tayangan");
+
+    var tb = E("button", "tuas-mars", "♪ Putar tayangan");
     tb.type = "button";
     tb.addEventListener("click", function () { bukaMars(); });
     isiK.appendChild(tb);
+
     if (ADMIN) {
-      var tbGanti = E("button", "tbl-kecil", "⚙ Ganti Video Mars");
-      tbGanti.type = "button";
-      tbGanti.style.marginLeft = "8px";
-      tbGanti.addEventListener("click", function () {
+      /* Tombol Unggah Mars */
+      var tbUnggah = E("button", "tbl-kecil", "📁 Unggah Mars (MP4)");
+      tbUnggah.type = "button";
+      tbUnggah.style.marginLeft = "8px";
+      tbUnggah.style.background = "#3E7C59";
+      tbUnggah.style.color = "#fff";
+      tbUnggah.style.fontWeight = "600";
+
+      var inpMars = document.createElement("input");
+      inpMars.type = "file";
+      inpMars.accept = "video/mp4,video/*";
+      inpMars.style.display = "none";
+
+      inpMars.addEventListener("change", function () {
+        var berkas = inpMars.files && inpMars.files[0];
+        if (!berkas) return;
+        if (berkas.size > 10 * 1024 * 1024) {
+          var objUrl = URL.createObjectURL(berkas);
+          if (videoMars) { videoMars.src = objUrl; marsSiap = false; }
+          window.alert("Ukuran video: " + (berkas.size / (1024 * 1024)).toFixed(1) + " MB.\n\n" +
+            "Video langsung aktif di perangkat ini. Untuk video berukuran besar, disarankan juga menaruh berkas di folder 'media/video/mars.mp4'.");
+          return;
+        }
+        var pembaca = new FileReader();
+        pembaca.onload = function () {
+          var dataUrl = pembaca.result;
+          MEDIA_KUSTOM["mars"] = dataUrl;
+          simpanMediaKustom();
+          if (videoMars) { videoMars.src = dataUrl; marsSiap = false; }
+          window.alert("Video Mars MP4 berhasil diunggah dan disimpan ke Supabase!");
+        };
+        pembaca.readAsDataURL(berkas);
+      });
+
+      tbUnggah.addEventListener("click", function () {
+        inpMars.click();
+      });
+      isiK.appendChild(tbUnggah);
+      isiK.appendChild(inpMars);
+
+      /* Tombol Tautan Mars */
+      var tbTautan = E("button", "tbl-kecil", "🔗 Tautan Mars");
+      tbTautan.type = "button";
+      tbTautan.style.marginLeft = "6px";
+      tbTautan.addEventListener("click", function () {
         var skrg = (MEDIA_KUSTOM && MEDIA_KUSTOM["mars"]) || "";
-        var baru = window.prompt("Masukkan URL tautan video Mars (link MP4 langsung):", skrg);
+        var baru = window.prompt("Masukkan URL tautan video Mars (tautan file .mp4, Google Drive, dsb):", skrg);
         if (baru === null) return;
         var tBaru = baru.trim();
         if (tBaru) {
           MEDIA_KUSTOM["mars"] = tBaru;
           simpanMediaKustom();
           if (videoMars) { videoMars.src = tBaru; marsSiap = false; }
-          window.alert("Video Mars berhasil diperbarui ke Supabase!");
-        } else {
-          delete MEDIA_KUSTOM["mars"];
-          simpanMediaKustom();
-          if (videoMars) { videoMars.src = MARS_SUMBAR; marsSiap = false; }
-          window.alert("Video Mars dikembalikan ke bawaan.");
+          window.alert("Tautan video Mars berhasil disimpan ke Supabase!");
         }
       });
-      isiK.appendChild(tbGanti);
+      isiK.appendChild(tbTautan);
+
+      /* Tombol Reset Mars */
+      if (MEDIA_KUSTOM && MEDIA_KUSTOM["mars"]) {
+        var tbReset = E("button", "tbl-kecil", "↺ Bawaan");
+        tbReset.type = "button";
+        tbReset.style.marginLeft = "6px";
+        tbReset.addEventListener("click", function () {
+          if (window.confirm("Kembalikan video Mars ke video asli bawaan?")) {
+            delete MEDIA_KUSTOM["mars"];
+            simpanMediaKustom();
+            if (videoMars) { videoMars.src = MARS_SUMBAR; marsSiap = false; }
+            window.alert("Video Mars dikembalikan ke bawaan.");
+            tbReset.style.display = "none";
+          }
+        });
+        isiK.appendChild(tbReset);
+      }
     }
+
     var cet = E("p", "cetak-saja", "Tayangan Mars Sumatera Barat tersedia pada versi digital modul ini.");
     isiK.appendChild(cet);
     k.appendChild(gb); k.appendChild(isiK);
     return k;
   }
+
+
 
   function buatPG(b, hal, kunciDasar) {
     var bungkus = E("div");
@@ -6513,20 +6677,54 @@ const AKHIR = [
 
   function bukaMars() {
     var sumberMars = (MEDIA_KUSTOM && MEDIA_KUSTOM["mars"]) || MARS_SUMBAR;
-    if (!marsSiap || videoMars.src !== sumberMars) {
-      videoMars.src = sumberMars; videoMars.poster = MARS_POSTER; marsSiap = true;
+    var embedMars = periksaVideoEmbed(sumberMars);
+    var wadahMars = videoMars ? videoMars.parentElement : null;
+    var ifrMars = wadahMars ? wadahMars.querySelector("iframe.mars-embed") : null;
+
+    if (embedMars) {
+      if (videoMars) {
+        videoMars.style.display = "none";
+        try { videoMars.pause(); } catch (e) { }
+      }
+      if (!ifrMars && wadahMars) {
+        ifrMars = document.createElement("iframe");
+        ifrMars.className = "mars-embed";
+        ifrMars.setAttribute("allowfullscreen", "");
+        ifrMars.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+        wadahMars.insertBefore(ifrMars, videoMars);
+      }
+      if (ifrMars && ifrMars.src !== embedMars.src) ifrMars.src = embedMars.src;
+      if (ifrMars) ifrMars.style.display = "block";
+    } else {
+      if (ifrMars) {
+        ifrMars.src = "";
+        ifrMars.style.display = "none";
+      }
+      if (videoMars) {
+        videoMars.style.display = "block";
+        if (!marsSiap || videoMars.src !== sumberMars) {
+          videoMars.src = sumberMars; videoMars.poster = MARS_POSTER; marsSiap = true;
+        }
+        var main = videoMars.play();
+        if (main && main.catch) main.catch(function () { });
+      }
     }
     tiraiMars.classList.add("buka");
     tiraiMars.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
-    var main = videoMars.play();
-    if (main && main.catch) main.catch(function () { });
   }
   function tutupMars() {
     tiraiMars.classList.remove("buka");
     tiraiMars.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
-    try { videoMars.pause(); } catch (e) { }
+    try { if (videoMars) videoMars.pause(); } catch (e) { }
+    var wadahMars = videoMars ? videoMars.parentElement : null;
+    var ifrMars = wadahMars ? wadahMars.querySelector("iframe.mars-embed") : null;
+    if (ifrMars) {
+      var curr = ifrMars.src;
+      ifrMars.src = "";
+      ifrMars.src = curr;
+    }
   }
   document.getElementById("btn-mars").addEventListener("click", bukaMars);
   document.getElementById("tutup-mars").addEventListener("click", tutupMars);

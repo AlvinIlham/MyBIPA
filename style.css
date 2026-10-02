@@ -241,7 +241,7 @@ th{background:#F7EBD6;font-size:12.5px;font-weight:700}
 .media h4{color:var(--krem);margin:0 0 4px;font-size:17px}
 .media p{color:rgba(255,247,234,.75);font-size:13.5px;margin-bottom:12px}
 .media audio{width:100%;display:block}
-.media video{width:100%;display:block;background:#000;border-radius:6px;aspect-ratio:16/9}
+.media video, .media .video-embed{width:100%;display:block;background:#000;border-radius:6px;aspect-ratio:16/9;border:none}
 .media .kaki{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .media .berkas{font-family:"IBM Plex Mono",monospace;font-size:11px;color:rgba(255,247,234,.5);word-break:break-all}
 .tbl-kecil{font-family:"IBM Plex Mono",monospace;font-size:11px;background:transparent;color:var(--emas);
@@ -787,7 +787,7 @@ body.paksa-desktop .tabel-gulung table{min-width:0}
 .tutup-mars{background:rgba(217,164,65,.15);color:var(--emas);border:1px solid rgba(217,164,65,.45);
   padding:8px 14px;border-radius:99px;font-size:13px;cursor:pointer;font-family:"IBM Plex Mono",monospace}
 .tutup-mars:hover{background:rgba(217,164,65,.3)}
-.kotak-mars video{width:100%;max-height:66svh;border-radius:8px;background:#000;display:block}
+.kotak-mars video, .kotak-mars .mars-embed{width:100%;aspect-ratio:16/9;max-height:66svh;border-radius:8px;background:#000;display:block;border:none}
 .ket-mars{color:#D9C5AE;font-size:12.5px;margin:10px 2px 2px;line-height:1.5}
 
 .mars-kartu{display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
@@ -805,7 +805,7 @@ body.paksa-desktop .tabel-gulung table{min-width:0}
 @media (max-width:560px){
   .mars-kartu{grid-template-columns:1fr;gap:12px}
   .mulai.kedua{margin-left:0}
-  .kotak-mars video{max-height:58svh}
+  .kotak-mars video, .kotak-mars .mars-embed{max-height:58svh}
 }
 @media print{
   .tirai-mars{display:none!important}
