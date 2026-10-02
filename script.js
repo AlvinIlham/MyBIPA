@@ -3265,11 +3265,24 @@ const AKHIR = [
   } catch (e) { SUNTINGAN = window.__SUNTINGAN_AWAL || {}; }
   function simpanSuntingan() {
     try {
-      /* Simpan ke localStorage hanya untuk suntingan teks biasa;
-         TIDAK menyimpan objek foto/media agar kuota localStorage tidak terpakai */
+      /* Simpan ke cache lokal teks dan tautan URL ringan (Drive/YouTube),
+         TIDAK menyimpan berkas Base64 (data:) agar kuota localStorage tidak pernah habis */
       var salinan = {};
       for (var k in SUNTINGAN) {
-        if (k !== "__FOTO__" && k !== "__MEDIA__") salinan[k] = SUNTINGAN[k];
+        if (k === "__FOTO__" || k === "__MEDIA__") {
+          var sub = SUNTINGAN[k];
+          if (sub && typeof sub === "object") {
+            var subBersih = {};
+            for (var sk in sub) {
+              if (typeof sub[sk] === "string" && !sub[sk].startsWith("data:")) {
+                subBersih[sk] = sub[sk];
+              }
+            }
+            salinan[k] = subBersih;
+          }
+        } else {
+          salinan[k] = SUNTINGAN[k];
+        }
       }
       window.localStorage.setItem(KUNCI_SUNTING, JSON.stringify(salinan));
     } catch (e) { }
@@ -3967,6 +3980,13 @@ const AKHIR = [
 
     kaki.appendChild(nama);
     kotak.appendChild(kaki);
+
+    /* Pasang sumber awal dan daftarkan pembaruan otomatis saat data Supabase tiba */
+    pasangSumberMedia(alamat);
+    daftarkanPemasangMedia(b.kode, function (urlBaru) {
+      pasangSumberMedia(urlBaru);
+    });
+
     kotak.appendChild(E("div", "cetak-saja",
       (jenisVideo ? "VIDEO" : "AUDIO") + " — " + alamat + (b.durasi ? " (" + b.durasi + ")" : "") + ". Putar dari perangkat pengajar."));
     return kotak;

@@ -1,6 +1,6 @@
 /**
  * UNIT TEST: Sistem Media & Gambar Daring MyBIPA (Google Drive & YouTube)
- * Memastikan media dan gambar bekerja secara online tanpa menggunakan localStorage.
+ * Memastikan media dan gambar bekerja secara online, persisten saat refresh, dan bebas kuota Base64.
  */
 
 const test = require('node:test');
@@ -56,7 +56,6 @@ function periksaVideoEmbed(url) {
   return null;
 }
 
-// Simulasi DOM untuk pengujian pasangGambarAman
 function pasangGambarAman(elImg, urlAsli, fallbackUrl) {
   if (!elImg) return;
   if (!urlAsli) {
@@ -104,7 +103,6 @@ test('Ekstraksi ID Google Drive dari berbagai format URL', (t) => {
     assert.strictEqual(id, item.expected, `Gagal mengekstrak ID dari: ${item.url}`);
   }
 
-  // Bukan link Google Drive
   assert.strictEqual(ekstrakGoogleDriveId('https://example.com/audio.mp3'), null);
   assert.strictEqual(ekstrakGoogleDriveId(''), null);
   assert.strictEqual(ekstrakGoogleDriveId(null), null);
@@ -139,7 +137,6 @@ test('Konversi link Google Drive ke direct URL gambar lh3.googleusercontent.com'
   const hasil = ubahKeUrlGambar(driveUrl);
   assert.strictEqual(hasil, 'https://lh3.googleusercontent.com/d/1PhotoId987654321');
 
-  // URL gambar web biasa tidak diubah
   const webUrl = 'https://images.unsplash.com/photo-123456';
   assert.strictEqual(ubahKeUrlGambar(webUrl), webUrl);
 });
@@ -190,9 +187,9 @@ test('Pasang gambar aman dengan fallback otomatis jika terjadi error', (t) => {
 });
 
 // ==========================================
-// TEST SUITE 6: Proteksi Non-LocalStorage
+// TEST SUITE 6: Persistensi Tautan & Anti-Base64
 // ==========================================
-test('Penyimpanan foto dan media TIDAK masuk ke localStorage', (t) => {
+test('Persistensi tautan daring (Drive/YouTube) dan pencegahan Base64 di localStorage', (t) => {
   const fakeLocalStorage = {};
   const mockWindow = {
     localStorage: {
@@ -205,22 +202,34 @@ test('Penyimpanan foto dan media TIDAK masuk ke localStorage', (t) => {
   const KUNCI_SUNTING = "mybipa-a1-sunting-global";
   const SUNTINGAN = {
     "sid-judul": "Judul Baru Bab 1",
-    "sid-teks": "Teks materi yang diperbarui",
     "__FOTO__": {
       "foto.unit-1.0": "https://lh3.googleusercontent.com/d/1PhotoUnit0",
-      "sampul": "https://lh3.googleusercontent.com/d/1SampulOnline"
+      "sampul": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w..." // Base64 besar
     },
     "__MEDIA__": {
-      "u1-menyimak": "https://drive.google.com/file/d/1AudioDrive/view",
-      "u1-video": "https://www.youtube.com/watch?v=1VideoYt"
+      "u1a1": "https://drive.google.com/file/d/1AudioDrive/view",
+      "u1v1": "https://www.youtube.com/watch?v=1VideoYt",
+      "u2a1": "data:audio/mp3;base64,//uQxAAAAAA..." // Base64 besar
     }
   };
 
-  // Implementasi fungsi simpanSuntingan baru
   function simpanSuntinganSimulasi() {
     var salinan = {};
     for (var k in SUNTINGAN) {
-      if (k !== "__FOTO__" && k !== "__MEDIA__") salinan[k] = SUNTINGAN[k];
+      if (k === "__FOTO__" || k === "__MEDIA__") {
+        var sub = SUNTINGAN[k];
+        if (sub && typeof sub === "object") {
+          var subBersih = {};
+          for (var sk in sub) {
+            if (typeof sub[sk] === "string" && !sub[sk].startsWith("data:")) {
+              subBersih[sk] = sub[sk];
+            }
+          }
+          salinan[k] = subBersih;
+        }
+      } else {
+        salinan[k] = SUNTINGAN[k];
+      }
     }
     mockWindow.localStorage.setItem(KUNCI_SUNTING, JSON.stringify(salinan));
   }
@@ -229,15 +238,49 @@ test('Penyimpanan foto dan media TIDAK masuk ke localStorage', (t) => {
 
   const tersimpan = JSON.parse(mockWindow.localStorage.getItem(KUNCI_SUNTING));
   assert.strictEqual(tersimpan["sid-judul"], "Judul Baru Bab 1");
-  assert.strictEqual(tersimpan["sid-teks"], "Teks materi yang diperbarui");
-  
-  // VERIFIKASI UTAMA: __FOTO__ dan __MEDIA__ TIDAK boleh ada di localStorage!
-  assert.strictEqual(tersimpan["__FOTO__"], undefined, "Objek __FOTO__ tidak boleh disimpan di localStorage");
-  assert.strictEqual(tersimpan["__MEDIA__"], undefined, "Objek __MEDIA__ tidak boleh disimpan di localStorage");
 
-  // Dan kunci lama tidak ada
-  assert.strictEqual(mockWindow.localStorage.getItem("mybipa-a1-foto-modul"), null);
-  assert.strictEqual(mockWindow.localStorage.getItem("mybipa-a1-media-kustom"), null);
+  // Tautan daring (Google Drive & YouTube) tersimpan dan persisten saat refresh
+  assert.strictEqual(tersimpan["__MEDIA__"]["u1a1"], "https://drive.google.com/file/d/1AudioDrive/view");
+  assert.strictEqual(tersimpan["__MEDIA__"]["u1v1"], "https://www.youtube.com/watch?v=1VideoYt");
+  assert.strictEqual(tersimpan["__FOTO__"]["foto.unit-1.0"], "https://lh3.googleusercontent.com/d/1PhotoUnit0");
+
+  // KETAT: Berkas Base64 besar WAJIB dibuang dari localStorage agar kuota tidak jebol
+  assert.strictEqual(tersimpan["__MEDIA__"]["u2a1"], undefined, "Data Base64 audio dilarang disimpan ke localStorage");
+  assert.strictEqual(tersimpan["__FOTO__"]["sampul"], undefined, "Data Base64 gambar dilarang disimpan ke localStorage");
+});
+
+// ==========================================
+// TEST SUITE 7: Sinkronisasi Asinkron Supabase
+// ==========================================
+test('Sinkronisasi callback saat data tiba dari Supabase (terapkanSemuaMedia)', (t) => {
+  let dipasang = {};
+  const DAFTAR_PEMASANG = [];
+
+  function daftarkan(kode, fn) {
+    DAFTAR_PEMASANG.push({ kode: kode, fn: fn });
+  }
+
+  // Daftarkan komponen pemutar audio
+  daftarkan("u1a1", function (url) { dipasang["u1a1"] = url; });
+  daftarkan("u1v1", function (url) { dipasang["u1v1"] = url; });
+
+  // Simulasi kedatangan data dari Supabase
+  const dataSupabase = {
+    __MEDIA__: {
+      "u1a1": "https://drive.google.com/file/d/1AudioFromCloud/view",
+      "u1v1": "https://www.youtube.com/watch?v=1VideoFromCloud"
+    }
+  };
+
+  // Jalankan terapkanSemuaMedia
+  DAFTAR_PEMASANG.forEach(function (p) {
+    if (dataSupabase.__MEDIA__[p.kode]) {
+      p.fn(dataSupabase.__MEDIA__[p.kode]);
+    }
+  });
+
+  assert.strictEqual(dipasang["u1a1"], "https://drive.google.com/file/d/1AudioFromCloud/view");
+  assert.strictEqual(dipasang["u1v1"], "https://www.youtube.com/watch?v=1VideoFromCloud");
 });
 
 console.log("\n=======================================================");
