@@ -1,4 +1,4 @@
-﻿/* ---- dari baris 10-939 ---- */
+/* ---- dari baris 10-939 ---- */
 
 
 /* ==========================================================================
@@ -263,15 +263,15 @@ th{background:#F7EBD6;font-size:12.5px;font-weight:700}
 .soal{border:1px solid var(--garis);border-radius:8px;padding:14px 18px;margin:0 0 12px;background:#fff}
 .soal .tanya{font-weight:600;margin-bottom:10px}
 .pilihan{display:grid;gap:7px}
-.pilihan button{display:flex;gap:10px;align-items:flex-start;text-align:left;background:#FFFCF4;
+.pilihan button, .pilihan .pg-opsi-btn{display:flex;gap:10px;align-items:flex-start;text-align:left;background:#FFFCF4;
   border:1.5px solid var(--garis);border-radius:7px;padding:10px 13px;font-size:14.5px;cursor:pointer;
   transition:transform .12s ease,border-color .2s,background .2s;color:var(--tinta)}
-.pilihan button:hover:not(:disabled){border-color:var(--emas);transform:translateX(3px)}
-.pilihan button .huruf{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--abu);flex:none;
+.pilihan button:hover:not(:disabled), .pilihan .pg-opsi-btn:hover:not(.nonaktif){border-color:var(--emas);transform:translateX(3px)}
+.pilihan button .huruf, .pilihan .pg-opsi-btn .huruf{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--abu);flex:none;
   width:18px;font-weight:600}
-.pilihan button.benar{border-color:var(--hijau);background:#EDF7F1;color:#22553C}
-.pilihan button.salah{border-color:var(--merah);background:#FBEDEC;color:#8E2B21}
-.pilihan button:disabled{cursor:default}
+.pilihan button.benar, .pilihan .pg-opsi-btn.benar{border-color:var(--hijau);background:#EDF7F1;color:#22553C}
+.pilihan button.salah, .pilihan .pg-opsi-btn.salah{border-color:var(--merah);background:#FBEDEC;color:#8E2B21}
+.pilihan button:disabled, .pilihan .pg-opsi-btn.nonaktif{cursor:default}
 .umpan{margin-top:10px;font-size:13.5px;padding:9px 13px;border-radius:7px;display:none}
 .umpan.tampil{display:block;animation:masuk .35s ease}
 .umpan.ya{background:#EDF7F1;color:#22553C;border-left:3px solid var(--hijau)}
@@ -296,12 +296,12 @@ textarea:focus{border-color:var(--emas);background:#fff}
 
 .jodoh{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 .jodoh .lajur{display:grid;gap:8px;align-content:start}
-.jodoh button{background:#FFFCF4;border:1.5px solid var(--garis);border-radius:8px;padding:10px 13px;
+.jodoh button, .jodoh .jodoh-btn{background:#FFFCF4;border:1.5px solid var(--garis);border-radius:8px;padding:10px 13px;
   text-align:left;font-size:14px;cursor:pointer;color:var(--tinta);transition:.15s}
-.jodoh button:hover:not(:disabled){border-color:var(--emas)}
-.jodoh button.pilih{border-color:var(--jingga);background:#FFF0E3}
-.jodoh button.cocok{border-color:var(--hijau);background:#EDF7F1;color:#22553C;cursor:default}
-.jodoh button.geleng{animation:geleng .4s}
+.jodoh button:hover:not(:disabled), .jodoh .jodoh-btn:hover:not(.cocok){border-color:var(--emas)}
+.jodoh button.pilih, .jodoh .jodoh-btn.pilih{border-color:var(--jingga);background:#FFF0E3}
+.jodoh button.cocok, .jodoh .jodoh-btn.cocok{border-color:var(--hijau);background:#EDF7F1;color:#22553C;cursor:default}
+.jodoh button.geleng, .jodoh .jodoh-btn.geleng{animation:geleng .4s}
 @keyframes geleng{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 
 .kartu-kata{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
@@ -873,6 +873,11 @@ body.diam .sampul-bingkai,body.diam #gambar-sampul{animation:none!important}
 /* ---------- MODE SUNTING ---------- */
 body.sunting [data-sid]{outline:1px dashed rgba(184,134,43,.8);outline-offset:3px;border-radius:3px}
 body.sunting [data-sid]:focus{outline:2px solid var(--hijau);background:#FFFDF2}
+body.sunting .pg-opsi-btn, body.sunting .jodoh-btn, body.sunting .keping{cursor:default}
+body.sunting .pg-opsi-btn:hover, body.sunting .jodoh-btn:hover{transform:none;border-color:var(--garis)}
+body.sunting [data-sid]{cursor:text;user-select:text}
+body.sunting .tanya{display:block;min-width:50px}
+body.sunting .opsi-teks, body.sunting .jodoh-teks, body.sunting .keping-teks, body.sunting .kartu-teks{display:inline-block;min-width:20px}
 .bilah button.aktif{background:var(--emas);color:#3A1508}
 .petunjuk-sunting{position:fixed;left:10px;right:10px;bottom:70px;z-index:59;display:none;
   background:rgba(62,124,89,.96);color:#fff;padding:10px 13px;border-radius:11px;

@@ -3298,6 +3298,16 @@ const AKHIR = [
             SUNTINGAN[k] = dataCloud[k];
           }
         }
+        if (dataCloud.__FOTO__ && typeof dataCloud.__FOTO__ === "object") {
+          FOTO_MODUL = dataCloud.__FOTO__;
+          tulisGudang(KUNCI_FOTO_MODUL, FOTO_MODUL);
+          terapkanSemuaFoto();
+        }
+        if (dataCloud.__MEDIA__ && typeof dataCloud.__MEDIA__ === "object") {
+          MEDIA_KUSTOM = dataCloud.__MEDIA__;
+          tulisGudang(KUNCI_MEDIA_KUSTOM, MEDIA_KUSTOM);
+          terapkanSemuaMedia();
+        }
         simpanSuntingan();
         terapkanSuntingan();
       }
@@ -3352,11 +3362,59 @@ const AKHIR = [
   /* ---------- kemajuan ---------- */
   var POIN = {};   // idHalaman -> {total:n, selesai:{}}
   /* ================= PENILAIAN OTOMATIS ================= */
+  /* ---------- media & foto kustom tersinkron Supabase ---------- */
   var KUNCI_FOTO_MODUL = "mybipa-a1-foto-modul";
-  var FOTO_MODUL = bacaGudang(KUNCI_FOTO_MODUL, {});
+  var FOTO_MODUL = (SUNTINGAN && SUNTINGAN.__FOTO__) || bacaGudang(KUNCI_FOTO_MODUL, {});
+  var KUNCI_MEDIA_KUSTOM = "mybipa-a1-media-kustom";
+  var MEDIA_KUSTOM = (SUNTINGAN && SUNTINGAN.__MEDIA__) || bacaGudang(KUNCI_MEDIA_KUSTOM, {});
+
+  var DAFTAR_PEMASANG_FOTO = [];
+  function daftarkanPemasangFoto(kunci, fn) {
+    DAFTAR_PEMASANG_FOTO.push({ kunci: kunci, fn: fn });
+    if (FOTO_MODUL && FOTO_MODUL[kunci]) {
+      try { fn(FOTO_MODUL[kunci]); } catch (e) { }
+    }
+  }
+  function terapkanSemuaFoto() {
+    DAFTAR_PEMASANG_FOTO.forEach(function (p) {
+      try { p.fn(FOTO_MODUL[p.kunci] || ""); } catch (e) { }
+    });
+    if (FOTO_MODUL["sampul"] && document.getElementById("gambar-sampul")) {
+      document.getElementById("gambar-sampul").src = FOTO_MODUL["sampul"];
+      var ls = document.getElementById("latar-sampul");
+      if (ls) ls.src = FOTO_MODUL["sampul"];
+    }
+  }
+
+  var DAFTAR_PEMASANG_MEDIA = [];
+  function daftarkanPemasangMedia(kode, fn) {
+    DAFTAR_PEMASANG_MEDIA.push({ kode: kode, fn: fn });
+    if (MEDIA_KUSTOM && MEDIA_KUSTOM[kode]) {
+      try { fn(MEDIA_KUSTOM[kode]); } catch (e) { }
+    }
+  }
+  function terapkanSemuaMedia() {
+    DAFTAR_PEMASANG_MEDIA.forEach(function (p) {
+      try { if (MEDIA_KUSTOM[p.kode]) p.fn(MEDIA_KUSTOM[p.kode]); } catch (e) { }
+    });
+    var vm = document.getElementById("video-mars");
+    if (MEDIA_KUSTOM["mars"] && vm) {
+      vm.src = MEDIA_KUSTOM["mars"];
+    }
+  }
+
   function simpanFotoModul() {
-    if (!tulisGudang(KUNCI_FOTO_MODUL, FOTO_MODUL))
-      window.alert("Foto tampil sekarang, tetapi tidak dapat disimpan karena penyimpanan peramban penuh atau terblokir.");
+    SUNTINGAN.__FOTO__ = FOTO_MODUL;
+    simpanSuntingan();
+    supabaseSimpanSuntingan();
+    tulisGudang(KUNCI_FOTO_MODUL, FOTO_MODUL);
+  }
+
+  function simpanMediaKustom() {
+    SUNTINGAN.__MEDIA__ = MEDIA_KUSTOM;
+    simpanSuntingan();
+    supabaseSimpanSuntingan();
+    tulisGudang(KUNCI_MEDIA_KUSTOM, MEDIA_KUSTOM);
   }
   function kecilkanGambar(berkas, sisiMaks, lanjut) {
     var pembaca = new FileReader();
@@ -3673,7 +3731,7 @@ const AKHIR = [
   function buatMedia(b, hal) {
     var jenisVideo = (b.j === "video");
     var kotak = E("div", "media");
-    var alamat = MEDIA[b.kode] || ("media/" + b.kode + (jenisVideo ? ".mp4" : ".mp3"));
+    var alamat = (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) || MEDIA[b.kode] || ("media/" + b.kode + (jenisVideo ? ".mp4" : ".mp3"));
     kotak.innerHTML =
       '<div class="kop"><span class="kode">' + (jenisVideo ? "VIDEO" : "AUDIO") + " · " + b.kode.toUpperCase() +
       '</span><span class="durasi">' + (b.durasi || "") + "</span></div>" +
@@ -3686,26 +3744,70 @@ const AKHIR = [
     kotak.appendChild(pemutar);
 
     var kaki = E("div", "kaki");
-    var tombol = E("button", "tbl-kecil", jenisVideo ? "Pilih berkas video" : "Pilih berkas audio");
+    var tombol = E("button", "tbl-kecil", jenisVideo ? "⚙ Ganti berkas/link video" : "⚙ Ganti berkas/link audio");
     tombol.type = "button";
-    var nama = E("span", "berkas", alamat);
+    var nama = E("span", "berkas", (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) ? "Tersambung ke media kustom (Supabase)" : alamat);
+
+    function pasangMediaKustom(url) {
+      pemutar.src = url;
+      pemutar.load();
+      nama.textContent = url.startsWith("data:") ? "Media tersimpan di basis data Supabase" : url;
+      nama.style.color = "#3E7C59";
+    }
+    daftarkanPemasangMedia(b.kode, pasangMediaKustom);
+
     tombol.addEventListener("click", function () {
-      var inp = document.createElement("input");
-      inp.type = "file";
-      inp.accept = jenisVideo ? "video/*" : "audio/*";
-      inp.addEventListener("change", function () {
-        var berkas = inp.files && inp.files[0];
-        if (!berkas) return;
-        pemutar.src = URL.createObjectURL(berkas);
-        pemutar.load();
-        nama.textContent = berkas.name + " · dimuat dari perangkat ini";
-        nama.style.color = "#D9A441";
-      });
-      inp.click();
+      var pesan = "PENGATURAN " + (jenisVideo ? "VIDEO" : "AUDIO") + " MODUL (" + b.kode.toUpperCase() + "):\n\n" +
+        "1. Tempelkan URL tautan langsung (link MP3/MP4, YouTube, Google Drive, dsb).\n" +
+        "2. Atau ketik 'unggah' untuk memilih berkas dari komputer/ponsel ini.\n\n" +
+        "Tautan saat ini: " + (MEDIA_KUSTOM[b.kode] || alamat);
+      var masukkan = window.prompt(pesan, (MEDIA_KUSTOM[b.kode] || ""));
+      if (masukkan === null) return;
+      var teks = masukkan.trim();
+      if (!teks) {
+        if (window.confirm("Hapus media kustom dan kembalikan ke berkas bawaan?")) {
+          delete MEDIA_KUSTOM[b.kode];
+          simpanMediaKustom();
+          pemutar.src = MEDIA[b.kode] || ("media/" + b.kode + (jenisVideo ? ".mp4" : ".mp3"));
+          pemutar.load();
+          nama.textContent = pemutar.src;
+          nama.style.color = "";
+        }
+        return;
+      }
+      if (teks.toLowerCase() === "unggah") {
+        var inp = document.createElement("input");
+        inp.type = "file";
+        inp.accept = jenisVideo ? "video/*" : "audio/*";
+        inp.addEventListener("change", function () {
+          var berkas = inp.files && inp.files[0];
+          if (!berkas) return;
+          if (berkas.size > 8 * 1024 * 1024) {
+            window.alert("Ukuran berkas melebihi 8MB. Disarankan memasukkan URL tautan daring (misal Google Drive/Cloudinary/YouTube) agar pemuatan cepat.");
+            return;
+          }
+          var pembaca = new FileReader();
+          pembaca.onload = function () {
+            var dataUrl = pembaca.result;
+            MEDIA_KUSTOM[b.kode] = dataUrl;
+            simpanMediaKustom();
+            pasangMediaKustom(dataUrl);
+            window.alert((jenisVideo ? "Video" : "Audio") + " berhasil disimpan ke Supabase!");
+          };
+          pembaca.readAsDataURL(berkas);
+        });
+        inp.click();
+      } else {
+        MEDIA_KUSTOM[b.kode] = teks;
+        simpanMediaKustom();
+        pasangMediaKustom(teks);
+        window.alert((jenisVideo ? "Video" : "Audio") + " berhasil disimpan ke Supabase!");
+      }
     });
+
     var sudahCadangan = false;
     pemutar.addEventListener("error", function () {
-      if (pemutar.src.indexOf("blob:") === 0) return;
+      if (pemutar.src.indexOf("blob:") === 0 || pemutar.src.indexOf("data:") === 0) return;
       if (!sudahCadangan && AUDIO_BAWAAN[b.kode]) {
         sudahCadangan = true;
         pemutar.src = AUDIO_BAWAAN[b.kode];
@@ -4490,6 +4592,7 @@ const AKHIR = [
       else { gbr.hidden = true; kosong.style.display = ""; }
     }
     pasang(FOTO_MODUL[kunci]);
+    daftarkanPemasangFoto(kunci, pasang);
 
     if (ADMIN) {
       var tb = E("button", "fd-unggah", "Unggah gambar");
@@ -4577,6 +4680,29 @@ const AKHIR = [
     tb.type = "button";
     tb.addEventListener("click", function () { bukaMars(); });
     isiK.appendChild(tb);
+    if (ADMIN) {
+      var tbGanti = E("button", "tbl-kecil", "⚙ Ganti Video Mars");
+      tbGanti.type = "button";
+      tbGanti.style.marginLeft = "8px";
+      tbGanti.addEventListener("click", function () {
+        var skrg = (MEDIA_KUSTOM && MEDIA_KUSTOM["mars"]) || "";
+        var baru = window.prompt("Masukkan URL tautan video Mars (link MP4 langsung):", skrg);
+        if (baru === null) return;
+        var tBaru = baru.trim();
+        if (tBaru) {
+          MEDIA_KUSTOM["mars"] = tBaru;
+          simpanMediaKustom();
+          if (videoMars) { videoMars.src = tBaru; marsSiap = false; }
+          window.alert("Video Mars berhasil diperbarui ke Supabase!");
+        } else {
+          delete MEDIA_KUSTOM["mars"];
+          simpanMediaKustom();
+          if (videoMars) { videoMars.src = MARS_SUMBAR; marsSiap = false; }
+          window.alert("Video Mars dikembalikan ke bawaan.");
+        }
+      });
+      isiK.appendChild(tbGanti);
+    }
     var cet = E("p", "cetak-saja", "Tayangan Mars Sumatera Barat tersedia pada versi digital modul ini.");
     isiK.appendChild(cet);
     k.appendChild(gb); k.appendChild(isiK);
@@ -4595,10 +4721,13 @@ const AKHIR = [
       var umpan = E("div", "umpan");
       var tombolSemua = [];
       s.o.forEach(function (o, j) {
-        var t = E("button", null, '<span class="huruf">' + huruf[j] + '</span><span>' + o + "</span>");
-        t.type = "button";
-        t.addEventListener("click", function () {
-          tombolSemua.forEach(function (x) { x.disabled = true; });
+        var t = E("div", "pg-opsi-btn", '<span class="huruf">' + huruf[j] + '</span><span class="opsi-teks">' + o + "</span>");
+        t.setAttribute("role", "button");
+        t.setAttribute("tabindex", "0");
+        t.addEventListener("click", function (ev) {
+          if (modeSunting) return;
+          if (t.classList.contains("nonaktif")) return;
+          tombolSemua.forEach(function (x) { x.classList.add("nonaktif"); });
           var benar = (j === s.k);
           t.classList.add(benar ? "benar" : "salah");
           if (!benar) tombolSemua[s.k].classList.add("benar");
@@ -4608,12 +4737,18 @@ const AKHIR = [
           setNilai(hal, kunci, benar ? 1 : 0);
           simpan(); tandaiPoin(hal, kunci);
         });
+        t.addEventListener("keydown", function (ev) {
+          if ((ev.key === "Enter" || ev.key === " ") && !modeSunting) {
+            ev.preventDefault();
+            t.click();
+          }
+        });
         tombolSemua.push(t);
         pilihan.appendChild(t);
       });
       if (JAWAB[kunci]) {
         if (SKOR[kunci] === undefined) SKOR[kunci] = (JAWAB[kunci] === "benar") ? 1 : 0;
-        tombolSemua.forEach(function (x) { x.disabled = true; });
+        tombolSemua.forEach(function (x) { x.classList.add("nonaktif"); });
         tombolSemua[s.k].classList.add("benar");
         umpan.className = "umpan tampil ya";
         umpan.innerHTML = "<b>Sudah dijawab sebelumnya. </b>" + (s.e || "");
@@ -4631,14 +4766,18 @@ const AKHIR = [
     b.butir.forEach(function (s, i) {
       var kunci = kunciDasar + ".cl" + i;
       daftarPoin(hal, kunci); daftarNilai(hal, kunci);
-      var p = E("p");
+      var p = E("p", "cloze-baris");
       var bagian = s.t.split("{}");
-      p.appendChild(document.createTextNode((i + 1) + ". " + bagian[0]));
+      var sKiri = E("span", "cloze-teks", (i + 1) + ". " + bagian[0]);
+      p.appendChild(sKiri);
       var inp = document.createElement("input");
       inp.type = "text"; inp.setAttribute("aria-label", "isian nomor " + (i + 1));
       inp.value = JAWAB[kunci] || "";
       p.appendChild(inp);
-      if (bagian[1]) p.appendChild(document.createTextNode(bagian[1]));
+      if (bagian[1]) {
+        var sKanan = E("span", "cloze-teks", bagian[1]);
+        p.appendChild(sKanan);
+      }
       kotak.appendChild(p);
       isian.push({ inp: inp, k: s.k, kunci: kunci });
       inp.addEventListener("input", function () { JAWAB[kunci] = inp.value; simpan(); });
@@ -4689,11 +4828,15 @@ const AKHIR = [
     b.pasangan.forEach(function (p, i) {
       var kunci = kunciDasar + ".jd" + i;
       daftarPoin(hal, kunci); daftarNilai(hal, kunci);
-      var a = E("button", null, p[0]); a.type = "button"; a.dataset.pas = i; a.dataset.kunci = kunci;
+      var a = E("div", "jodoh-btn", '<span class="jodoh-teks">' + p[0] + '</span>');
+      a.setAttribute("role", "button"); a.setAttribute("tabindex", "0");
+      a.dataset.pas = i; a.dataset.kunci = kunci;
       kiri.appendChild(a);
     });
     acak(b.pasangan.map(function (p, i) { return { t: p[1], i: i }; })).forEach(function (o) {
-      var t = E("button", null, o.t); t.type = "button"; t.dataset.pas = o.i;
+      var t = E("div", "jodoh-btn", '<span class="jodoh-teks">' + o.t + '</span>');
+      t.setAttribute("role", "button"); t.setAttribute("tabindex", "0");
+      t.dataset.pas = o.i;
       kanan.appendChild(t);
     });
     function selesaiSatu(a, t) {
@@ -4705,12 +4848,14 @@ const AKHIR = [
       pesan.textContent = sisa ? ("Tinggal " + sisa + " pasangan lagi.") : "Semua pasangan tepat.";
     }
     kiri.addEventListener("click", function (ev) {
-      var t = ev.target.closest("button"); if (!t || t.disabled) return;
+      if (modeSunting) return;
+      var t = ev.target.closest(".jodoh-btn"); if (!t || t.classList.contains("cocok")) return;
       Array.prototype.forEach.call(kiri.children, function (x) { x.classList.remove("pilih"); });
       t.classList.add("pilih"); terpilih = t;
     });
     kanan.addEventListener("click", function (ev) {
-      var t = ev.target.closest("button"); if (!t || t.disabled) return;
+      if (modeSunting) return;
+      var t = ev.target.closest(".jodoh-btn"); if (!t || t.classList.contains("cocok")) return;
       if (!terpilih) { pesan.textContent = "Pilih dahulu kata di kolom kiri."; return; }
       if (t.dataset.pas === terpilih.dataset.pas) { selesaiSatu(terpilih, t); terpilih = null; }
       else {
@@ -4730,10 +4875,13 @@ const AKHIR = [
     var papan = E("div", "kartu-kata");
     b.entri.forEach(function (e) {
       var k = E("div", "kartu");
-      k.innerHTML = '<div class="dalam"><div class="sisi depan">' + e[0] +
-        "<small>klik untuk membalik</small></div>" +
-        '<div class="sisi belakang">' + e[1] + "</div></div>";
-      k.addEventListener("click", function () { k.classList.toggle("balik"); });
+      k.innerHTML = '<div class="dalam"><div class="sisi depan"><span class="kartu-teks">' + e[0] +
+        "</span><small>klik untuk membalik</small></div>" +
+        '<div class="sisi belakang"><span class="kartu-teks">' + e[1] + "</span></div></div>";
+      k.addEventListener("click", function () {
+        if (modeSunting) return;
+        k.classList.toggle("balik");
+      });
       papan.appendChild(k);
     });
     return papan;
@@ -4906,7 +5054,7 @@ const AKHIR = [
         JAWAB[kunci] = c.checked ? "ya" : ""; simpan();
         if (c.checked) tandaiPoin(hal, kunci); else { delete POIN[hal].selesai[kunci]; perbaruiLaju(); }
       });
-      baris.appendChild(c); baris.appendChild(E("span", null, t));
+      baris.appendChild(c); baris.appendChild(E("span", "cek-teks", t));
       kotak.appendChild(baris);
     });
     return kotak;
@@ -4930,8 +5078,9 @@ const AKHIR = [
         kosong.style.display = jawab.querySelectorAll(".keping").length ? "none" : "block";
       }
       acak(s.kata).forEach(function (k) {
-        var t = E("button", "keping", k); t.type = "button";
+        var t = E("button", "keping", '<span class="keping-teks">' + k + '</span>'); t.type = "button";
         t.addEventListener("click", function () {
+          if (modeSunting) return;
           if (t.parentNode === bank) jawab.appendChild(t); else bank.appendChild(t);
           jawab.classList.remove("benar", "salah");
           segarkan();
@@ -5120,6 +5269,7 @@ const AKHIR = [
         else { gbrUnit.hidden = true; kosongUnit.style.display = ""; }
       }
       pasangUnit(FOTO_MODUL[kunciFotoUnit]);
+      daftarkanPemasangFoto(kunciFotoUnit, pasangUnit);
       if (ADMIN) {
         var tbUnit = E("button", "fd-unggah", "Unggah gambar");
         tbUnit.type = "button";
@@ -5246,9 +5396,38 @@ const AKHIR = [
 
   /* ---------- identitas & sampul ---------- */
   var gambarSampul = document.getElementById("gambar-sampul");
-  gambarSampul.src = IDENTITAS.sampul || SAMPUL_BAWAAN;
+  gambarSampul.src = (FOTO_MODUL && FOTO_MODUL["sampul"]) || IDENTITAS.sampul || SAMPUL_BAWAAN;
   var latarSampul = document.getElementById("latar-sampul");
   if (latarSampul) latarSampul.src = gambarSampul.src;
+  daftarkanPemasangFoto("sampul", function (data) {
+    if (data && gambarSampul) {
+      gambarSampul.src = data;
+      if (latarSampul) latarSampul.src = data;
+    }
+  });
+  if (ADMIN) {
+    var tbSampul = E("button", "tbl-kecil", "📷 Ganti Foto Sampul");
+    tbSampul.type = "button";
+    tbSampul.style.marginTop = "8px";
+    tbSampul.style.cursor = "pointer";
+    tbSampul.addEventListener("click", function () {
+      var inp = document.createElement("input");
+      inp.type = "file"; inp.accept = "image/*";
+      inp.addEventListener("change", function () {
+        var berkas = inp.files && inp.files[0];
+        if (!berkas) return;
+        kecilkanGambar(berkas, 1200, function (data) {
+          FOTO_MODUL["sampul"] = data;
+          simpanFotoModul();
+          terapkanSemuaFoto();
+          window.alert("Foto sampul berhasil diperbarui ke Supabase!");
+        });
+      });
+      inp.click();
+    });
+    var heroPanel = document.querySelector(".hero");
+    if (heroPanel) heroPanel.appendChild(tbSampul);
+  }
   var gambarRumah = document.getElementById("rumah-gadang");
   if (gambarRumah) gambarRumah.src = RUMAH_GADANG;
   var logoUnp = document.getElementById("logo-unp");
@@ -6217,15 +6396,19 @@ const AKHIR = [
   });
 
   /* ---------- mode sunting ---------- */
-  var PILIH_SUNTING = "#isi p, #isi li, #isi td, #isi th, #isi h2, #isi h3, #isi h4, " +
+  var PILIH_SUNTING = "#isi p:not(.cloze-baris), #isi li, #isi td, #isi th, #isi h2, #isi h3, #isi h4, " +
     "#isi .ucap, #isi .pelaku, #isi .penanda, #isi .perintah, #isi .judul-teks, " +
-    "#isi .sumber, #isi .jenis, #isi .tag, #isi .kegiatan-kop .judul, #isi .lencana b, #isi .lencana span";
+    "#isi .sumber, #isi .jenis, #isi .tag, #isi .kegiatan-kop .judul, #isi .kegiatan-kop .nomor, " +
+    "#isi .tujuan b, #isi .lencana b, #isi .lencana span, #isi .tanya, #isi .opsi-teks, " +
+    "#isi .cloze-teks, #isi .jodoh-teks, #isi .kartu-teks, #isi .keping-teks, #isi .cek-teks, " +
+    "#isi .lafal-teks, #isi .nomor-butir";
   var sasaranSunting = document.querySelectorAll(PILIH_SUNTING);
   var idxSid = 0;
   Array.prototype.forEach.call(sasaranSunting, function (el) {
-    /* Kecualikan tombol, input, dan halaman pantauan/kelas agar urutan sid admin & pemelajar 100% cocok */
-    if (el.closest("button") || el.closest("textarea") || el.closest(".umpan") ||
+    /* Kecualikan tombol kontrol sistem, textarea, umpan, dan halaman pantauan/kelas */
+    if (el.closest("textarea") || el.closest(".umpan") ||
         el.closest("#pantauan") || el.closest("#kelas")) return;
+    if (el.closest("button")) return;
     var sid = "s" + (idxSid++);
     el.dataset.sid = sid;
     el.dataset.teksAsli = el.innerHTML;
@@ -6278,10 +6461,14 @@ const AKHIR = [
   });
 
   document.getElementById("btn-asal").addEventListener("click", function () {
-    if (!window.confirm("Kembalikan seluruh teks modul ke bentuk aslinya? Suntingan Anda akan dihapus.")) return;
+    if (!window.confirm("Kembalikan seluruh isi modul (teks, foto, dan media) ke bentuk aslinya? Suntingan Anda akan dihapus.")) return;
     SUNTINGAN = {};
+    FOTO_MODUL = {};
+    MEDIA_KUSTOM = {};
     try {
       window.localStorage.removeItem(KUNCI_SUNTING);
+      window.localStorage.removeItem(KUNCI_FOTO_MODUL);
+      window.localStorage.removeItem(KUNCI_MEDIA_KUSTOM);
       window.localStorage.removeItem("mybipa-a1-minangkabau-sunting");
       if (AKUN && AKUN.surel) window.localStorage.removeItem("mybipa-a1-minangkabau::" + AKUN.surel + "-sunting");
     } catch (e) { }
@@ -6325,7 +6512,10 @@ const AKHIR = [
   var marsSiap = false;
 
   function bukaMars() {
-    if (!marsSiap) { videoMars.src = MARS_SUMBAR; videoMars.poster = MARS_POSTER; marsSiap = true; }
+    var sumberMars = (MEDIA_KUSTOM && MEDIA_KUSTOM["mars"]) || MARS_SUMBAR;
+    if (!marsSiap || videoMars.src !== sumberMars) {
+      videoMars.src = sumberMars; videoMars.poster = MARS_POSTER; marsSiap = true;
+    }
     tiraiMars.classList.add("buka");
     tiraiMars.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
