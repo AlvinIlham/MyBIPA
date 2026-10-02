@@ -3852,163 +3852,82 @@ const AKHIR = [
     kotak.appendChild(wadahPemutar);
 
     var kaki = E("div", "kaki");
-    var nama = E("span", "berkas", (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) ? "Tersambung ke media kustom (Supabase)" : alamat);
+    var nama = E("span", "badge-status");
 
     function pasangSumberMedia(url) {
       var embed = periksaVideoEmbed(url);
 
-      if (embed && (jenisVideo || embed.tipe === "youtube")) {
-        /* VIDEO atau YouTube Audio: tampilkan iframe YouTube/GDrive Preview */
+      if (embed && embed.tipe === "youtube") {
+        /* YouTube: baik video maupun audio */
         pemutar.style.display = "none";
         pemutar.removeAttribute("src");
         try { pemutar.pause(); } catch (e) { }
-        var ifr = wadahPemutar.querySelector("iframe.video-embed");
-        if (!ifr) {
-          ifr = document.createElement("iframe");
-          ifr.className = "video-embed";
-          ifr.setAttribute("allowfullscreen", "");
-          ifr.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
-          wadahPemutar.appendChild(ifr);
+
+        var ifrYt = wadahPemutar.querySelector("iframe.media-embed");
+        if (!ifrYt) {
+          ifrYt = document.createElement("iframe");
+          ifrYt.setAttribute("allowfullscreen", "");
+          ifrYt.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+          wadahPemutar.appendChild(ifrYt);
         }
-        ifr.src = embed.src;
-        ifr.style.display = "block";
-        nama.textContent = "Tersambung ke " + (embed.tipe === "youtube" ? "YouTube" : "Google Drive") + " (Online Supabase)";
-        nama.style.color = "#3E7C59";
+        ifrYt.className = jenisVideo ? "video-embed media-embed" : "audio-embed media-embed";
+        ifrYt.src = embed.src;
+        ifrYt.style.display = "block";
+        nama.innerHTML = '<span class="titik"></span> YouTube';
 
-      } else if (embed && embed.tipe === "drive" && !jenisVideo) {
-        /* AUDIO dari Google Drive: coba direct stream dahulu, fallback otomatis ke iframe preview */
-        var ifrAda = wadahPemutar.querySelector("iframe.video-embed");
-        if (ifrAda) { ifrAda.src = ""; ifrAda.style.display = "none"; }
-        pemutar.style.display = "block";
-        pemutar.src = embed.directUrl;
-        pemutar.load();
-        nama.textContent = "Tersambung ke Google Drive (Online Supabase)";
-        nama.style.color = "#3E7C59";
+      } else if (embed && embed.tipe === "drive") {
+        /* Google Drive: video (16:9) atau audio (160px clean player) */
+        pemutar.style.display = "none";
+        pemutar.removeAttribute("src");
+        try { pemutar.pause(); } catch (e) { }
 
-        pemutar.onerror = function () {
-          if (pemutar.style.display === "none") return;
-          /* Jika stream directUrl diblokir oleh Google Drive, beralih ke preview iframe */
-          pemutar.style.display = "none";
-          var ifrGD = wadahPemutar.querySelector("iframe.video-embed");
-          if (!ifrGD) {
-            ifrGD = document.createElement("iframe");
-            ifrGD.className = "video-embed";
-            ifrGD.style.height = "120px";
-            ifrGD.setAttribute("allowfullscreen", "");
-            ifrGD.setAttribute("allow", "autoplay");
-            wadahPemutar.appendChild(ifrGD);
-          }
-          ifrGD.src = embed.src;
-          ifrGD.style.display = "block";
-          nama.textContent = "Tersambung ke Google Drive Player (Online Supabase)";
-          nama.style.color = "#3E7C59";
-        };
+        var ifrGd = wadahPemutar.querySelector("iframe.media-embed");
+        if (!ifrGd) {
+          ifrGd = document.createElement("iframe");
+          ifrGd.setAttribute("allowfullscreen", "");
+          ifrGd.setAttribute("allow", "autoplay");
+          wadahPemutar.appendChild(ifrGd);
+        }
+        ifrGd.className = jenisVideo ? "video-embed media-embed" : "audio-embed media-embed";
+        ifrGd.src = embed.src;
+        ifrGd.style.display = "block";
+        nama.innerHTML = '<span class="titik"></span> Google Drive';
 
       } else {
-        /* Berkas langsung (MP3/MP4, URL biasa) */
-        var ifrAda2 = wadahPemutar.querySelector("iframe.video-embed");
-        if (ifrAda2) { ifrAda2.src = ""; ifrAda2.style.display = "none"; }
+        /* Berkas langsung (MP3/MP4 atau bawaan) */
+        var ifrSisa = wadahPemutar.querySelector("iframe.media-embed");
+        if (ifrSisa) { ifrSisa.src = ""; ifrSisa.style.display = "none"; }
         pemutar.style.display = "block";
         pemutar.src = url;
         pemutar.load();
         if (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) {
-          nama.textContent = url.startsWith("data:") ? "Berkas media (Online Supabase)" : url;
-          nama.style.color = "#3E7C59";
+          nama.innerHTML = '<span class="titik"></span> Tautan Kustom';
         } else {
-          nama.textContent = url;
-          nama.style.color = "";
+          nama.innerHTML = '<span class="titik" style="background:#d9a441;box-shadow:0 0 6px #d9a441"></span> Berkas Bawaan';
         }
       }
+
       if (btnReset) {
-        btnReset.style.display = (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) ? "inline-block" : "none";
+        btnReset.style.display = (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) ? "inline-flex" : "none";
       }
     }
 
-    /* Tombol-tombol Admin: Tombol Unggah File & Tombol Tautan URL */
-    var btnUnggah = null;
     var btnLink = null;
     var btnReset = null;
 
     if (ADMIN) {
-      /* 1. Tombol Unggah Berkas Langsung */
-      btnUnggah = E("button", "tbl-kecil", jenisVideo ? "📁 Unggah Video (MP4)" : "📁 Unggah Audio (MP3)");
-      btnUnggah.type = "button";
-      btnUnggah.style.background = "#3E7C59";
-      btnUnggah.style.color = "#fff";
-      btnUnggah.style.fontWeight = "600";
-      btnUnggah.title = "Pilih berkas dari komputer atau ponsel Anda";
+      var grupAdmin = E("div", "grup-tombol-admin");
 
-      var inpBerkas = document.createElement("input");
-      inpBerkas.type = "file";
-      inpBerkas.accept = jenisVideo ? "video/mp4,video/*" : "audio/mp3,audio/*";
-      inpBerkas.style.display = "none";
-
-      inpBerkas.addEventListener("change", function () {
-        var berkas = inpBerkas.files && inpBerkas.files[0];
-        if (!berkas) return;
-        nama.textContent = "Memproses " + berkas.name + " (" + (berkas.size / (1024 * 1024)).toFixed(1) + " MB)…";
-        nama.style.color = "#D9A441";
-
-        if (berkas.size > 10 * 1024 * 1024) {
-          /* File besar > 10MB: preview via ObjectURL dan berikan petunjuk praktis */
-          var objUrl = URL.createObjectURL(berkas);
-          pasangSumberMedia(objUrl);
-          window.alert("Ukuran video: " + (berkas.size / (1024 * 1024)).toFixed(1) + " MB.\n\n" +
-            "Video sudah langsung aktif dan dapat diputar di perangkat ini.\n\n" +
-            "TIPS PENGELOLAAN VIDEO BESAR:\n" +
-            "1. Agar modul tetap ringan dan bisa diputar secara offline oleh semua pengguna, letakkan berkas video ini di folder:\n" +
-            "   media/video/" + (b.kode) + ".mp4\n\n" +
-            "2. Atau unggah video ke penyimpanan awan (Cloud/Direct Link MP4) lalu gunakan tombol '🔗 Tautan Video'.");
-          return;
-        }
-
-        /* File <= 10MB: convert to DataURL Base64 dan simpan ke Supabase */
-        var teksAwal = btnUnggah.textContent;
-        btnUnggah.disabled = true;
-        btnUnggah.textContent = "⏳ Menyimpan ke Supabase…";
-        nama.textContent = "Mengunggah " + berkas.name + " (" + (berkas.size / (1024 * 1024)).toFixed(1) + " MB) ke Supabase…";
-        nama.style.color = "#D9A441";
-
-        var pembaca = new FileReader();
-        pembaca.onload = function () {
-          var dataUrl = pembaca.result;
-          MEDIA_KUSTOM[b.kode] = dataUrl;
-          pasangSumberMedia(dataUrl);
-          simpanMediaKustom(function (ok, err) {
-            btnUnggah.disabled = false;
-            btnUnggah.textContent = teksAwal;
-            if (ok) {
-              nama.textContent = "Berkas tersimpan di Supabase";
-              nama.style.color = "#3E7C59";
-              window.alert((jenisVideo ? "Video MP4" : "Audio MP3") + " BERHASIL disimpan ke basis data Supabase!\n\nSekarang Anda bebas memuat ulang (refresh) halaman tanpa khawatir audio hilang.");
-            } else {
-              nama.textContent = "Gagal simpan ke Supabase: " + (err || "cek koneksi");
-              nama.style.color = "#E8413B";
-              window.alert("PERINGATAN: Gagal menyimpan ke Supabase (" + (err || "jaringan/kuota") + "). Pastikan koneksi internet aktif.");
-            }
-          });
-        };
-        pembaca.readAsDataURL(berkas);
-      });
-
-      btnUnggah.addEventListener("click", function () {
-        inpBerkas.click();
-      });
-
-      /* 2. Tombol Tautan / Link URL */
-      btnLink = E("button", "tbl-kecil", "🔗 Tautan (Drive / YouTube / URL)");
+      btnLink = E("button", "tbl-admin-link", jenisVideo ? "🔗 Ganti Video (Drive / YouTube)" : "🔗 Ganti Audio (Drive / YouTube)");
       btnLink.type = "button";
-      btnLink.style.background = "#2B5A84";
-      btnLink.style.color = "#fff";
-      btnLink.style.fontWeight = "600";
-      btnLink.title = "Gunakan tautan Google Drive, YouTube, atau URL daring";
+      btnLink.title = "Atur tautan Google Drive atau YouTube";
       btnLink.addEventListener("click", function () {
         var skrg = MEDIA_KUSTOM[b.kode] || alamat;
-        var pesan = "MASUKKAN LINK " + (jenisVideo ? "VIDEO" : "AUDIO") + " (" + b.kode.toUpperCase() + "):\n\n" +
+        var pesan = "ATUR TAUTAN " + (jenisVideo ? "VIDEO" : "AUDIO") + " (" + b.kode.toUpperCase() + "):\n\n" +
           "• Tautan YouTube (contoh: https://www.youtube.com/watch?v=... atau https://youtu.be/...)\n" +
           "• Tautan Google Drive (contoh: https://drive.google.com/file/d/.../view)\n" +
           "• Atau tautan berkas daring langsung (.mp3 / .mp4)\n\n" +
-          "Catatan: Media ini disimpan secara online ke database Supabase (bebas kuota localStorage).\n\n" +
+          "Catatan: Disimpan secara online ke basis data Supabase (bebas kuota localStorage).\n\n" +
           "Tautan saat ini: " + skrg;
         var masukkan = window.prompt(pesan, (MEDIA_KUSTOM[b.kode] || ""));
         if (masukkan === null) return;
@@ -4026,10 +3945,10 @@ const AKHIR = [
         }
       });
 
-      /* 3. Tombol Reset / Kembalikan ke berkas bawaan */
-      btnReset = E("button", "tbl-kecil", "↺ Kembalikan Asli");
+      btnReset = E("button", "tbl-admin-reset", "↺ Bawaan");
       btnReset.type = "button";
       btnReset.title = "Hapus media kustom dan kembali ke berkas awal";
+      btnReset.style.display = (MEDIA_KUSTOM && MEDIA_KUSTOM[b.kode]) ? "inline-flex" : "none";
       btnReset.addEventListener("click", function () {
         if (window.confirm("Hapus media kustom dan kembalikan ke berkas bawaan?")) {
           delete MEDIA_KUSTOM[b.kode];
@@ -4041,39 +3960,9 @@ const AKHIR = [
         }
       });
 
-      kaki.appendChild(btnUnggah);
-      kaki.appendChild(inpBerkas);
-      kaki.appendChild(btnLink);
-      kaki.appendChild(btnReset);
-    }
-
-    pasangSumberMedia(alamat);
-
-    function pasangMediaKustom(url) {
-      pasangSumberMedia(url);
-    }
-    daftarkanPemasangMedia(b.kode, pasangMediaKustom);
-
-    var sudahCadangan = false;
-    pemutar.addEventListener("error", function () {
-      if (pemutar.style.display === "none") return;
-      if (!pemutar.src || pemutar.src.indexOf("blob:") === 0 || pemutar.src.indexOf("data:") === 0) return;
-      if (!sudahCadangan && AUDIO_BAWAAN[b.kode]) {
-        sudahCadangan = true;
-        pemutar.src = AUDIO_BAWAAN[b.kode];
-        pemutar.load();
-        /* tidak memutar otomatis (autoplay dimatikan) */
-        nama.textContent = "rekaman latihan sementara · suara sintetis bawaan modul";
-        nama.style.color = "#D9A441";
-        return;
-      }
-      nama.textContent = alamat + " · berkas belum tersedia, gunakan tombol unggah di samping";
-    });
-
-    if (AUDIO_BAWAAN[b.kode]) {
-      kotak.classList.add("ada-cadangan");
-      var tandaC = E("span", "tanda-cadangan", "● rekaman sementara tersedia");
-      kotak.querySelector(".kop").appendChild(tandaC);
+      grupAdmin.appendChild(btnLink);
+      grupAdmin.appendChild(btnReset);
+      kaki.appendChild(grupAdmin);
     }
 
     kaki.appendChild(nama);
