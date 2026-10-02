@@ -485,6 +485,9 @@ textarea:focus{border-color:var(--emas);background:#fff}
   border:1px solid rgba(217,164,65,.5);border-radius:99px;padding:7px 14px;font:inherit;font-size:11.5px;
   cursor:pointer}
 .fd-unggah:hover{background:var(--bara)}
+.grup-tombol-foto{position:absolute;right:10px;bottom:10px;display:flex;gap:6px;z-index:5}
+.grup-tombol-foto .fd-unggah{position:static;right:auto;bottom:auto}
+@media print{.grup-tombol-foto{display:none}}
 .fd-tanya{background:#E8F0F7;border-radius:10px;padding:11px 16px;text-align:center;
   font-size:15px;color:#25465F;margin:0}
 
