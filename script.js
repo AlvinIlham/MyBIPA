@@ -3255,7 +3255,7 @@ const AKHIR = [
   var REGISTER = [];   // untuk mengunduh jawaban
 
   /* ---------- penyimpanan suntingan teks ---------- */
-  var KUNCI_SUNTING = KUNCI_SIMPAN + "-sunting";
+  var KUNCI_SUNTING = "mybipa-a1-sunting-global";
   var SUNTINGAN = {};
   try {
     var bawaan = window.__SUNTINGAN_AWAL || {};
@@ -3265,6 +3265,75 @@ const AKHIR = [
   } catch (e) { SUNTINGAN = window.__SUNTINGAN_AWAL || {}; }
   function simpanSuntingan() {
     try { window.localStorage.setItem(KUNCI_SUNTING, JSON.stringify(SUNTINGAN)); } catch (e) { }
+  }
+
+  /* Terapkan seluruh suntingan ke elemen DOM bermarka data-sid */
+  function terapkanSuntingan() {
+    var elems = document.querySelectorAll("[data-sid]");
+    Array.prototype.forEach.call(elems, function (el) {
+      var sid = el.dataset.sid;
+      if (Object.prototype.hasOwnProperty.call(SUNTINGAN, sid) && SUNTINGAN[sid] !== undefined && SUNTINGAN[sid] !== null) {
+        el.innerHTML = SUNTINGAN[sid];
+      } else if (el.dataset.teksAsli !== undefined) {
+        el.innerHTML = el.dataset.teksAsli;
+      }
+    });
+  }
+
+  /* ---------- sinkron suntingan ke/dari Supabase ---------- */
+  var _timerSunting = null;
+
+  /* Ambil suntingan dari Supabase saat halaman dibuka - berlaku untuk SEMUA pengguna */
+  function supabaseAmbilSuntingan(selesai) {
+    if (!SUPABASE_URL) { if (selesai) selesai(); return; }
+    supabaseReq("suntingan?id=eq.a1-modul&select=data", "GET", null, function (ok, hasil) {
+      if (ok && hasil && hasil[0] && typeof hasil[0].data === "object" && hasil[0].data !== null) {
+        var dataCloud = hasil[0].data;
+        /* Supabase adalah sumber kebenaran utama; timpa cache lama */
+        SUNTINGAN = {};
+        var bawaan = window.__SUNTINGAN_AWAL || {};
+        for (var kb in bawaan) { if (Object.prototype.hasOwnProperty.call(bawaan, kb)) SUNTINGAN[kb] = bawaan[kb]; }
+        for (var k in dataCloud) {
+          if (Object.prototype.hasOwnProperty.call(dataCloud, k)) {
+            SUNTINGAN[k] = dataCloud[k];
+          }
+        }
+        simpanSuntingan();
+        terapkanSuntingan();
+      }
+      if (selesai) selesai();
+    });
+  }
+
+  /* Simpan suntingan ke Supabase - hanya dipanggil oleh admin */
+  function supabaseSimpanSuntingan() {
+    if (!SUPABASE_URL || !ADMIN) return;
+    clearTimeout(_timerSunting);
+    _timerSunting = setTimeout(function () {
+      var muatan = {
+        id: "a1-modul",
+        data: SUNTINGAN,
+        diperbarui: new Date().toISOString(),
+        diperbarui_oleh: AKUN ? (AKUN.surel || AKUN.nama || "admin") : "admin"
+      };
+      supabaseReq("suntingan", "POST", muatan, function (ok, res, err) {
+        if (!ok) { console.warn("[MyBIPA] Gagal simpan suntingan ke Supabase:", err); }
+      });
+    }, 1500);
+  }
+
+  /* Hapus suntingan dari Supabase - saat admin menekan 'Kembalikan teks asli' */
+  function supabaseHapusSuntingan(selesai) {
+    if (!SUPABASE_URL || !ADMIN) { if (selesai) selesai(); return; }
+    var muatan = {
+      id: "a1-modul",
+      data: {},
+      diperbarui: new Date().toISOString(),
+      diperbarui_oleh: AKUN ? (AKUN.surel || AKUN.nama || "admin") : "admin"
+    };
+    supabaseReq("suntingan", "POST", muatan, function () {
+      if (selesai) selesai();
+    });
   }
 
   /* ---------- alat bantu ---------- */
@@ -5710,6 +5779,9 @@ const AKHIR = [
       }
     });
   }
+  /* Ambil suntingan terkini dari Supabase agar semua pengguna melihat versi yang sama */
+  supabaseAmbilSuntingan();
+
   /* perangkat baru: bila belum ada jawaban tersimpan, kemajuan ditarik sendiri dari basis data */
   if (AKUN && URL_SINKRON && Object.keys(JAWAB).length === 0) {
     setTimeout(function () {
@@ -6149,11 +6221,17 @@ const AKHIR = [
     "#isi .ucap, #isi .pelaku, #isi .penanda, #isi .perintah, #isi .judul-teks, " +
     "#isi .sumber, #isi .jenis, #isi .tag, #isi .kegiatan-kop .judul, #isi .lencana b, #isi .lencana span";
   var sasaranSunting = document.querySelectorAll(PILIH_SUNTING);
-  Array.prototype.forEach.call(sasaranSunting, function (el, i) {
-    if (el.closest("button") || el.closest("textarea") || el.closest(".umpan")) return;
-    var sid = "s" + i;
+  var idxSid = 0;
+  Array.prototype.forEach.call(sasaranSunting, function (el) {
+    /* Kecualikan tombol, input, dan halaman pantauan/kelas agar urutan sid admin & pemelajar 100% cocok */
+    if (el.closest("button") || el.closest("textarea") || el.closest(".umpan") ||
+        el.closest("#pantauan") || el.closest("#kelas")) return;
+    var sid = "s" + (idxSid++);
     el.dataset.sid = sid;
-    if (Object.prototype.hasOwnProperty.call(SUNTINGAN, sid)) el.innerHTML = SUNTINGAN[sid];
+    el.dataset.teksAsli = el.innerHTML;
+    if (Object.prototype.hasOwnProperty.call(SUNTINGAN, sid) && SUNTINGAN[sid] !== undefined && SUNTINGAN[sid] !== null) {
+      el.innerHTML = SUNTINGAN[sid];
+    }
   });
 
   var modeSunting = false;
@@ -6174,6 +6252,20 @@ const AKHIR = [
       if (nyala) { el.setAttribute("contenteditable", "true"); el.setAttribute("spellcheck", "false"); }
       else { el.removeAttribute("contenteditable"); el.removeAttribute("spellcheck"); }
     });
+    /* Bila admin menekan Selesai, langsung simpan segera ke Supabase tanpa menunggu sisa debounce */
+    if (!nyala && _timerSunting) {
+      clearTimeout(_timerSunting);
+      _timerSunting = null;
+      var muatan = {
+        id: "a1-modul",
+        data: SUNTINGAN,
+        diperbarui: new Date().toISOString(),
+        diperbarui_oleh: AKUN ? (AKUN.surel || AKUN.nama || "admin") : "admin"
+      };
+      supabaseReq("suntingan", "POST", muatan, function (ok, res, err) {
+        if (!ok) { console.warn("[MyBIPA] Gagal simpan suntingan ke Supabase:", err); }
+      });
+    }
   }
   btnSunting.addEventListener("click", function () { pasangSunting(!modeSunting); });
   isi.addEventListener("input", function (ev) {
@@ -6181,14 +6273,22 @@ const AKHIR = [
     var el = ev.target.closest ? ev.target.closest("[data-sid]") : null;
     if (!el) return;
     SUNTINGAN[el.dataset.sid] = el.innerHTML;
-    simpanSuntingan();
+    simpanSuntingan();           /* simpan ke cache lokal sebagai cadangan */
+    supabaseSimpanSuntingan();   /* sinkron ke Supabase secara global (debounce 1,5 dtk) */
   });
 
   document.getElementById("btn-asal").addEventListener("click", function () {
     if (!window.confirm("Kembalikan seluruh teks modul ke bentuk aslinya? Suntingan Anda akan dihapus.")) return;
     SUNTINGAN = {};
-    try { window.localStorage.removeItem(KUNCI_SUNTING); } catch (e) { }
-    window.location.reload();
+    try {
+      window.localStorage.removeItem(KUNCI_SUNTING);
+      window.localStorage.removeItem("mybipa-a1-minangkabau-sunting");
+      if (AKUN && AKUN.surel) window.localStorage.removeItem("mybipa-a1-minangkabau::" + AKUN.surel + "-sunting");
+    } catch (e) { }
+    /* Hapus juga dari Supabase agar semua pengguna kembali ke teks asli */
+    supabaseHapusSuntingan(function () {
+      window.location.reload();
+    });
   });
 
   /* ---------- unduh modul hasil suntingan ---------- */
